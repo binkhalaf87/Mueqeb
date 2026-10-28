@@ -59,14 +59,7 @@ export function navForRole(role: Role | null | undefined): NavItem[] {
         { href: "/dashboard/provider/services", label: "خدماتي وأسعاري" },
       ];
     case "admin":
-      return [
-        { href: ROLE_HOME.admin, label: "لوحة الإدارة" },
-        { href: "/admin/providers", label: "توثيق المزوّدين" },
-        { href: "/admin/disputes", label: "النزاعات" },
-        { href: "/admin/ledger", label: "دفتر الحسابات" },
-        { href: "/admin/moderation", label: "الرقابة" },
-        browse,
-      ];
+      return [{ href: ROLE_HOME.admin, label: "لوحة الإدارة" }, browse];
     default:
       return [{ href: "/onboarding", label: "إكمال التسجيل" }];
   }

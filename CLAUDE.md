@@ -83,6 +83,8 @@ completed | disputed → resolved
 - المحادثة تعتمد على Supabase Realtime: لا تستثنِ `realtime` عند `supabase start`.
 - آلة الحالات: `transition_request` (يحدد المنفّذ من الجلسة) و`transition_request_as` (داخلية بمنفّذ صريح).
   أي إغلاق لطلب مدفوع يتطلب تسوية الضمان أولاً (`settle_order_ledger`).
+- لوحة الإدارة: كل رقم مالي من الدفتر عبر `admin_kpis` و`ledger_account_balances`؛ كل تغيير إداري يُسجَّل
+  في `admin_audit_log` (append-only) عبر triggers أو دوال الإدارة.
 - ترتيب المزوّدين في التصفح: المعادلة والأوزان في `src/lib/providers/ranking.ts`.
 - بعد أي migration: `npm run db:reset && npm run seed && npm run db:types`.
 - الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`

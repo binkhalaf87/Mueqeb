@@ -23,6 +23,51 @@ export type Database = {
   };
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string;
+          actor_id: string | null;
+          created_at: string;
+          entity: string;
+          entity_key: string;
+          id: number;
+          new_value: Json | null;
+          old_value: Json | null;
+          reason: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          action: string;
+          actor_id?: string | null;
+          created_at?: string;
+          entity: string;
+          entity_key: string;
+          id?: never;
+          new_value?: Json | null;
+          old_value?: Json | null;
+          reason?: string | null;
+        };
+        Update: {
+          action?: string;
+          actor_id?: string | null;
+          created_at?: string;
+          entity?: string;
+          entity_key?: string;
+          id?: never;
+          new_value?: Json | null;
+          old_value?: Json | null;
+          reason?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       bids: {
         Row: {
           created_at: string;
@@ -274,6 +319,7 @@ export type Database = {
           journal_id: string;
           order_id: string;
           payment_id: string | null;
+          payout_id: string | null;
           reverses_journal_id: string | null;
         };
         ComputedFields: never;
@@ -287,6 +333,7 @@ export type Database = {
           journal_id: string;
           order_id: string;
           payment_id?: string | null;
+          payout_id?: string | null;
           reverses_journal_id?: string | null;
         };
         Update: {
@@ -299,6 +346,7 @@ export type Database = {
           journal_id?: string;
           order_id?: string;
           payment_id?: string | null;
+          payout_id?: string | null;
           reverses_journal_id?: string | null;
         };
         Relationships: [
@@ -314,6 +362,13 @@ export type Database = {
             columns: ["payment_id"];
             isOneToOne: false;
             referencedRelation: "payments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ledger_entries_payout_id_fkey";
+            columns: ["payout_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_payouts";
             referencedColumns: ["id"];
           },
         ];
@@ -624,6 +679,9 @@ export type Database = {
           id: string;
           phone: string | null;
           role: Database["public"]["Enums"]["user_role"] | null;
+          suspended_at: string | null;
+          suspended_by: string | null;
+          suspension_reason: string | null;
         };
         ComputedFields: never;
         Insert: {
@@ -633,6 +691,9 @@ export type Database = {
           id: string;
           phone?: string | null;
           role?: Database["public"]["Enums"]["user_role"] | null;
+          suspended_at?: string | null;
+          suspended_by?: string | null;
+          suspension_reason?: string | null;
         };
         Update: {
           city?: string | null;
@@ -641,8 +702,19 @@ export type Database = {
           id?: string;
           phone?: string | null;
           role?: Database["public"]["Enums"]["user_role"] | null;
+          suspended_at?: string | null;
+          suspended_by?: string | null;
+          suspension_reason?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "profiles_suspended_by_fkey";
+            columns: ["suspended_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       provider_documents: {
         Row: {
@@ -679,6 +751,52 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "provider_documents_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      provider_payouts: {
+        Row: {
+          amount_halalas: number;
+          bank_reference: string;
+          created_at: string;
+          id: string;
+          note: string | null;
+          paid_by: string;
+          provider_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          amount_halalas: number;
+          bank_reference: string;
+          created_at?: string;
+          id?: string;
+          note?: string | null;
+          paid_by: string;
+          provider_id: string;
+        };
+        Update: {
+          amount_halalas?: number;
+          bank_reference?: string;
+          created_at?: string;
+          id?: string;
+          note?: string | null;
+          paid_by?: string;
+          provider_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_payouts_paid_by_fkey";
+            columns: ["paid_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_payouts_provider_id_fkey";
             columns: ["provider_id"];
             isOneToOne: false;
             referencedRelation: "providers";
@@ -1244,6 +1362,7 @@ export type Database = {
     };
     Functions: {
       accept_bid: { Args: { p_bid_id: string }; Returns: undefined };
+      admin_kpis: { Args: Record<PropertyKey, never>; Returns: Json };
       blocked_term_in: { Args: { p_text: string }; Returns: string };
       can_access_thread: {
         Args: { p_provider_id: string; p_request_id: string };
@@ -1292,6 +1411,15 @@ export type Database = {
       is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_awarded_provider: { Args: { p_request_id: string }; Returns: boolean };
       is_request_member: { Args: { p_request_id: string }; Returns: boolean };
+      ledger_account_balances: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          account: Database["public"]["Enums"]["ledger_account"];
+          balance_halalas: number;
+          credit_halalas: number;
+          debit_halalas: number;
+        }[];
+      };
       ledger_transfer: {
         Args: {
           p_amount: number;
@@ -1319,6 +1447,25 @@ export type Database = {
       pct_to_bps: { Args: { p_pct: Json }; Returns: number };
       provider_can_view_request: { Args: { p_request_id: string }; Returns: boolean };
       provider_is_editable: { Args: { p_provider_id: string }; Returns: boolean };
+      provider_payable_by_order: {
+        Args: { p_provider_id: string };
+        Returns: {
+          balance_halalas: number;
+          order_id: string;
+        }[];
+      };
+      provider_payables: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          cr_number: string;
+          last_payout_at: string;
+          office_name: string;
+          orders_count: number;
+          outstanding_halalas: number;
+          paid_out_halalas: number;
+          provider_id: string;
+        }[];
+      };
       provider_reviews: {
         Args: { p_limit?: number; p_provider_id: string };
         Returns: {
@@ -1393,6 +1540,16 @@ export type Database = {
         };
         Returns: string;
       };
+      record_provider_payout: {
+        Args: {
+          p_admin_id: string;
+          p_bank_reference: string;
+          p_expected_halalas: number;
+          p_note?: string;
+          p_provider_id: string;
+        };
+        Returns: string;
+      };
       record_refund: {
         Args: {
           p_amount_halalas: number;
@@ -1463,6 +1620,10 @@ export type Database = {
       send_message: {
         Args: { p_body: string; p_provider_id: string; p_request_id: string };
         Returns: Json;
+      };
+      set_user_suspension: {
+        Args: { p_admin_id: string; p_profile_id: string; p_reason: string; p_suspend: boolean };
+        Returns: undefined;
       };
       settle_order_ledger: {
         Args: {

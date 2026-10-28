@@ -69,7 +69,7 @@ test("المحادثة: تحديث لحظي، ورفض طلب رمز التحق�
   await expect(requester.getByTestId("chat-messages")).not.toContainText(asking);
 
   const admin = await as(browser, "admin@mueqeb.test");
-  await admin.goto("/admin/moderation");
+  await admin.goto("/admin/reports");
   await expect(admin.getByTestId("blocked-messages")).toContainText(asking);
 });
 

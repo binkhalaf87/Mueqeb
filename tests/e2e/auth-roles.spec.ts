@@ -70,8 +70,8 @@ test.describe("حسابات seed", () => {
     await logIn(page, "admin@mueqeb.test");
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByTestId("current-user")).toContainText("الإدارة");
-    await expect(page.getByTestId("admin-user-counts")).toBeVisible();
-    await expect(page.getByText("provider_commission_pct")).toBeVisible();
+    await expect(page.getByTestId("kpi-revenue")).toBeVisible();
+    await expect(page.getByTestId("queue-count")).toBeVisible();
 
     await expectRedirect(page, "/dashboard/requester", "/admin");
     await expectRedirect(page, "/dashboard/provider", "/admin");

@@ -25,22 +25,23 @@ export default async function LedgerPage() {
       "id, journal_id, order_id, account, debit_halalas, credit_halalas, description, reverses_journal_id, created_at",
     )
     .order("id", { ascending: false })
-    .limit(500);
+    .limit(500); // آخر القيود للعرض؛ الأرصدة أعلاه من كل القيود
   const rows = entries ?? [];
 
-  // أرصدة الحسابات (مدين − دائن) على مستوى المنصة
-  const balances = new Map<string, number>();
-  for (const e of rows) {
-    balances.set(
-      e.account,
-      (balances.get(e.account) ?? 0) + Number(e.debit_halalas) - Number(e.credit_halalas),
-    );
-  }
+  // أرصدة الحسابات (مدين − دائن) على مستوى المنصة — من كل القيود في قاعدة البيانات
+  const { data: accountBalances } = await supabase.rpc("ledger_account_balances");
+  const balances = new Map(
+    (accountBalances ?? []).map((b) => [b.account, Number(b.balance_halalas)]),
+  );
+  const totalImbalance = (accountBalances ?? []).reduce(
+    (sum, b) => sum + Number(b.balance_halalas),
+    0,
+  );
 
   // تجميع حسب الطلب للتحقق من التوازن
   const byOrder = new Map<string, typeof rows>();
   for (const e of rows) byOrder.set(e.order_id, [...(byOrder.get(e.order_id) ?? []), e]);
-  const imbalance = ledgerImbalance(rows);
+  const imbalance = totalImbalance;
 
   return (
     <div className="space-y-6">
@@ -58,7 +59,9 @@ export default async function LedgerPage() {
         {[...balances.entries()].map(([account, balance]) => (
           <Card key={account} className="p-4">
             <p className="text-sm text-muted">{ACCOUNT_LABEL[account] ?? account}</p>
-            <p className="text-xl font-semibold">{formatHalalas(balance)}</p>
+            <p className="text-xl font-semibold" data-testid={`ledger-balance-${account}`}>
+              {formatHalalas(balance)}
+            </p>
           </Card>
         ))}
       </div>

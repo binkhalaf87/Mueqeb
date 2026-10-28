@@ -78,6 +78,9 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
     password: parsed.data.password,
   });
   if (error) {
+    if (error.code === "user_banned") {
+      return { message: "هذا الحساب موقوف من الإدارة. تواصل مع الدعم.", values };
+    }
     return { message: "بيانات الدخول غير صحيحة.", values };
   }
 

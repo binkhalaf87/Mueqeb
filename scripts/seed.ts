@@ -1,6 +1,8 @@
 /**
  * ينشئ مستخدمين تجريبيين في Supabase المحلي:
  * مدير، مزوّدان، طالب خدمة فرد، طالب خدمة منشأة.
+ * المزوّد 1 معتمد مع خدمات، والمزوّد 2 مُرسل وبانتظار التوثيق.
+ * (فئات وأنواع الخدمات تأتي من migration لأنها بيانات مرجعية)
  *
  * التشغيل: npm run seed  (يقرأ .env.local)
  * آمن لإعادة التشغيل: يتخطى المستخدمين الموجودين.
@@ -29,6 +31,16 @@ if (
 
 const SEED_PASSWORD = "Mueqeb#2026";
 
+type SeedProvider = {
+  officeName: string;
+  crNumber: string;
+  municipalLicenseNumber: string;
+  cities: string[];
+  bio: string;
+  status: "approved" | "under_review";
+  services: { slug: string; feeHalalas: number; durationDays: number; notes?: string }[];
+};
+
 type SeedUser = {
   label: string;
   email?: string;
@@ -37,6 +49,7 @@ type SeedUser = {
   city: string;
   role: Database["public"]["Enums"]["user_role"];
   account?: { type: "individual" } | { type: "establishment"; name: string; crNumber: string };
+  provider?: SeedProvider;
 };
 
 const USERS: SeedUser[] = [
@@ -50,16 +63,48 @@ const USERS: SeedUser[] = [
   {
     label: "مزوّد 1",
     email: "provider1@mueqeb.test",
-    fullName: "مكتب الإنجاز للخدمات العامة",
+    fullName: "عبدالله المطيري",
     city: "الرياض",
     role: "provider",
+    provider: {
+      officeName: "مكتب الإنجاز للخدمات العامة",
+      crNumber: "1010765432",
+      municipalLicenseNumber: "40021987",
+      cities: ["الرياض", "الدمام"],
+      bio: "مكتب خدمات عامة مرخّص منذ 2015، متخصص في خدمات المنشآت الصغيرة والمتوسطة في قوى والتأمينات وبلدي.",
+      status: "approved",
+      services: [
+        { slug: "qiwa_work_permit", feeHalalas: 18000, durationDays: 3 },
+        {
+          slug: "qiwa_transfer_service",
+          feeHalalas: 35000,
+          durationDays: 5,
+          notes: "يشمل متابعة موافقة العامل.",
+        },
+        { slug: "gosi_register_establishment", feeHalalas: 20000, durationDays: 2 },
+        { slug: "cr_modify_activity", feeHalalas: 30000, durationDays: 4 },
+        { slug: "balady_renew_license", feeHalalas: 25000, durationDays: 5 },
+      ],
+    },
   },
   {
     label: "مزوّد 2",
     phone: "+966500000002",
-    fullName: "مكتب السرعة للتعقيب",
+    fullName: "سلطان الغامدي",
     city: "جدة",
     role: "provider",
+    provider: {
+      officeName: "مكتب السرعة للتعقيب",
+      crNumber: "4030112233",
+      municipalLicenseNumber: "51007744",
+      cities: ["جدة", "مكة المكرمة"],
+      bio: "خدمات تعقيب سريعة لمنشآت جدة ومكة.",
+      status: "under_review",
+      services: [
+        { slug: "balady_shop_license", feeHalalas: 60000, durationDays: 10 },
+        { slug: "mudad_monthly_payroll", feeHalalas: 12000, durationDays: 1 },
+      ],
+    },
   },
   {
     label: "فرد",
@@ -134,7 +179,96 @@ async function seedUser(user: SeedUser) {
     .eq("id", id);
   if (profileError) throw profileError;
 
+  if (user.provider) await seedProvider(id, user.provider);
+
   console.log(`✓ ${user.label}: ${user.email ?? user.phone}`);
+}
+
+/** ملف PDF صغير صالح يُستخدم كمستند تجريبي */
+function samplePdf(title: string) {
+  const body = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 44>>stream
+BT /F1 18 Tf 20 70 Td (${title}) Tj ET
+endstream endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+trailer<</Root 1 0 R>>
+%%EOF`;
+  return new Blob([body], { type: "application/pdf" });
+}
+
+const DOC_TYPES = [
+  "commercial_register",
+  "municipal_license",
+  "manager_id",
+  "iban_certificate",
+] as const;
+
+async function seedProvider(profileId: string, p: SeedProvider) {
+  const { data: provider, error } = await supabase
+    .from("providers")
+    .insert({
+      profile_id: profileId,
+      office_name: p.officeName,
+      cr_number: p.crNumber,
+      municipal_license_number: p.municipalLicenseNumber,
+      cities: p.cities,
+      bio: p.bio,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  for (const docType of DOC_TYPES) {
+    const path = `${provider.id}/${docType}-seed.pdf`;
+    const { error: uploadError } = await supabase.storage
+      .from("provider-documents")
+      .upload(path, samplePdf(`SEED ${docType}`), { contentType: "application/pdf", upsert: true });
+    if (uploadError) throw uploadError;
+    const { error: docError } = await supabase.from("provider_documents").insert({
+      provider_id: provider.id,
+      doc_type: docType,
+      storage_path: path,
+      file_name: `${docType}.pdf`,
+      mime_type: "application/pdf",
+      size_bytes: 400,
+    });
+    if (docError) throw docError;
+  }
+
+  const { data: types, error: typesError } = await supabase
+    .from("service_types")
+    .select("id, slug")
+    .in(
+      "slug",
+      p.services.map((s) => s.slug),
+    );
+  if (typesError) throw typesError;
+  const idBySlug = new Map(types.map((t) => [t.slug, t.id]));
+
+  const { error: servicesError } = await supabase.from("provider_services").insert(
+    p.services.map((s) => ({
+      provider_id: provider.id,
+      service_type_id: idBySlug.get(s.slug)!,
+      fee_halalas: s.feeHalalas,
+      duration_days: s.durationDays,
+      notes: s.notes ?? null,
+    })),
+  );
+  if (servicesError) throw servicesError;
+
+  const now = new Date().toISOString();
+  const { error: statusError } = await supabase
+    .from("providers")
+    .update(
+      p.status === "approved"
+        ? { verification_status: "approved", submitted_at: now, reviewed_at: now }
+        : { submitted_at: now },
+    )
+    .eq("id", provider.id);
+  if (statusError) throw statusError;
 }
 
 async function main() {

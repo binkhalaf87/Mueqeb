@@ -16,13 +16,19 @@ export async function SiteHeader() {
           مُعقّب
         </Link>
 
-        {user && (
+        {user ? (
           <nav aria-label="القائمة الرئيسية" className="flex gap-4 text-sm">
             {navForRole(user.role).map((item) => (
               <Link key={item.href} href={item.href} className="text-foreground hover:text-primary">
                 {item.label}
               </Link>
             ))}
+          </nav>
+        ) : (
+          <nav aria-label="القائمة الرئيسية" className="flex gap-4 text-sm">
+            <Link href="/providers" className="text-foreground hover:text-primary">
+              تصفح المزوّدين
+            </Link>
           </nav>
         )}
 

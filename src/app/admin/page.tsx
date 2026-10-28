@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_LABEL, ROLES } from "@/lib/auth/routes";
@@ -10,9 +11,14 @@ export default async function AdminDashboard() {
   await requireRole("admin");
   const supabase = await createClient();
 
-  const [{ data: profiles }, { data: settings }] = await Promise.all([
+  const [{ data: profiles }, { data: settings }, { count: queueCount }] = await Promise.all([
     supabase.from("profiles").select("role"),
     supabase.from("settings").select("key, value, description").order("key"),
+    supabase
+      .from("providers")
+      .select("id", { count: "exact", head: true })
+      .eq("verification_status", "pending")
+      .not("submitted_at", "is", null),
   ]);
 
   const counts = new Map<string, number>();
@@ -24,6 +30,15 @@ export default async function AdminDashboard() {
   return (
     <div className="space-y-6">
       <PageTitle>لوحة الإدارة</PageTitle>
+
+      <Link href="/admin/providers" className="block">
+        <Card className="flex items-center justify-between transition hover:border-primary">
+          <span className="font-semibold">طلبات توثيق بانتظار المراجعة</span>
+          <span className="text-2xl font-bold text-primary" data-testid="queue-count">
+            {queueCount ?? 0}
+          </span>
+        </Card>
+      </Link>
 
       <div className="grid gap-4 sm:grid-cols-4" data-testid="admin-user-counts">
         {[...ROLES, "none" as const].map((role) => (

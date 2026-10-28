@@ -43,13 +43,22 @@ export function safeNextPath(next: unknown): string | null {
 export type NavItem = { href: string; label: string };
 
 export function navForRole(role: Role | null | undefined): NavItem[] {
+  const browse = { href: "/providers", label: "تصفح المزوّدين" };
   switch (role) {
     case "requester":
-      return [{ href: ROLE_HOME.requester, label: "طلباتي" }];
+      return [{ href: ROLE_HOME.requester, label: "طلباتي" }, browse];
     case "provider":
-      return [{ href: ROLE_HOME.provider, label: "لوحة المزوّد" }];
+      return [
+        { href: ROLE_HOME.provider, label: "لوحة المزوّد" },
+        { href: "/dashboard/provider/profile", label: "ملف المكتب" },
+        { href: "/dashboard/provider/services", label: "خدماتي وأسعاري" },
+      ];
     case "admin":
-      return [{ href: ROLE_HOME.admin, label: "لوحة الإدارة" }];
+      return [
+        { href: ROLE_HOME.admin, label: "لوحة الإدارة" },
+        { href: "/admin/providers", label: "توثيق المزوّدين" },
+        browse,
+      ];
     default:
       return [{ href: "/onboarding", label: "إكمال التسجيل" }];
   }

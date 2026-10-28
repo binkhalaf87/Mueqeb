@@ -28,6 +28,8 @@ export async function logIn(page: Page, identifier: string, path = "/login") {
   await page.getByLabel("الجوال أو البريد الإلكتروني").fill(identifier);
   await page.getByLabel("كلمة المرور").fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "دخول" }).click();
+  // انتظر اكتمال الدخول (إعادة التوجيه خارج صفحة الدخول) قبل أي تنقل لاحق
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
 /** يتحقق أن زيارة المسار تعيد التوجيه إلى المسار المتوقع */

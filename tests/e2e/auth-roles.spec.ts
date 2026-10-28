@@ -51,7 +51,7 @@ test.describe("التسجيل لكل دور", () => {
     await page.getByRole("button", { name: "متابعة" }).click();
 
     await expect(page).toHaveURL(/\/dashboard\/provider$/);
-    await expect(page.getByText("حسابك بانتظار التوثيق")).toBeVisible();
+    await expect(page.getByTestId("provider-stage")).toContainText("مسودة");
 
     await expectRedirect(page, "/dashboard/requester", "/dashboard/provider");
     await expectRedirect(page, "/admin", "/dashboard/provider");

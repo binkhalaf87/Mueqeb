@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { refundPayment } from "@/lib/payments/process";
 import { fieldErrors } from "@/lib/auth/validation";
 import { rpcErrorMessage } from "@/lib/requests/constants";
 import { createRequestSchema } from "@/lib/requests/validation";
@@ -66,6 +67,41 @@ export async function cancelRequest(_prev: FormState, formData: FormData): Promi
   await requireRole("requester");
   const requestId = String(formData.get("requestId") ?? "");
   const supabase = await createClient();
+
+  // القراءة بصلاحيات المستخدم (RLS) تضمن أنه عضو في حساب الطلب
+  const { data: request } = await supabase
+    .from("service_requests")
+    .select("status, orders(id, payment_status)")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (!request) return { message: "الطلب غير متاح." };
+
+  const order = request.orders;
+  if (order?.payment_status === "paid") {
+    // الإلغاء قبل بدء التنفيذ: استرداد كامل عبر البوابة ثم قيد عكسي وإلغاء في معاملة واحدة
+    if (request.status !== "paid" && request.status !== "awaiting_client") {
+      return { message: "لا يمكن الإلغاء بعد بدء التنفيذ." };
+    }
+    const { data: payment } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("order_id", order.id)
+      .eq("status", "paid")
+      .maybeSingle();
+    if (!payment) return { message: "تعذّر العثور على الدفعة." };
+    try {
+      await refundPayment(payment.id, {
+        cancelRequest: true,
+        note: "ألغاه العميل قبل بدء التنفيذ — استرداد كامل",
+      });
+    } catch (err) {
+      console.error("refund failed", err);
+      return { message: "تعذّر الاسترداد من بوابة الدفع؛ لم يُلغَ الطلب. حاول لاحقاً." };
+    }
+    revalidateRequestPages();
+    return { message: "أُلغي الطلب وأُعيد المبلغ كاملاً." };
+  }
+
   const { error } = await supabase.rpc("transition_request", {
     p_request_id: requestId,
     p_to: "cancelled",

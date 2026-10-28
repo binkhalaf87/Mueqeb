@@ -118,6 +118,61 @@ export type Database = {
           },
         ];
       };
+      ledger_entries: {
+        Row: {
+          account: Database["public"]["Enums"]["ledger_account"];
+          created_at: string;
+          credit_halalas: number;
+          debit_halalas: number;
+          description: string;
+          id: number;
+          journal_id: string;
+          order_id: string;
+          payment_id: string | null;
+          reverses_journal_id: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          account: Database["public"]["Enums"]["ledger_account"];
+          created_at?: string;
+          credit_halalas?: number;
+          debit_halalas?: number;
+          description: string;
+          id?: never;
+          journal_id: string;
+          order_id: string;
+          payment_id?: string | null;
+          reverses_journal_id?: string | null;
+        };
+        Update: {
+          account?: Database["public"]["Enums"]["ledger_account"];
+          created_at?: string;
+          credit_halalas?: number;
+          debit_halalas?: number;
+          description?: string;
+          id?: never;
+          journal_id?: string;
+          order_id?: string;
+          payment_id?: string | null;
+          reverses_journal_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ledger_entries_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ledger_entries_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: false;
+            referencedRelation: "payments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       order_events: {
         Row: {
           actor_id: string | null;
@@ -163,6 +218,181 @@ export type Database = {
             columns: ["request_id"];
             isOneToOne: false;
             referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      orders: {
+        Row: {
+          bid_id: string;
+          client_fee_bps: number;
+          client_fee_halalas: number;
+          created_at: string;
+          expected_gov_fees_halalas: number;
+          fee_halalas: number;
+          id: string;
+          paid_at: string | null;
+          payment_status: Database["public"]["Enums"]["order_payment_status"];
+          provider_commission_bps: number;
+          provider_commission_halalas: number;
+          provider_id: string;
+          provider_net_halalas: number;
+          provider_service_id: string | null;
+          refunded_at: string | null;
+          request_id: string;
+          total_paid_halalas: number;
+        };
+        ComputedFields: never;
+        Insert: {
+          bid_id: string;
+          client_fee_bps: number;
+          client_fee_halalas: number;
+          created_at?: string;
+          expected_gov_fees_halalas?: number;
+          fee_halalas: number;
+          id?: string;
+          paid_at?: string | null;
+          payment_status?: Database["public"]["Enums"]["order_payment_status"];
+          provider_commission_bps: number;
+          provider_commission_halalas: number;
+          provider_id: string;
+          provider_net_halalas: number;
+          provider_service_id?: string | null;
+          refunded_at?: string | null;
+          request_id: string;
+          total_paid_halalas: number;
+        };
+        Update: {
+          bid_id?: string;
+          client_fee_bps?: number;
+          client_fee_halalas?: number;
+          created_at?: string;
+          expected_gov_fees_halalas?: number;
+          fee_halalas?: number;
+          id?: string;
+          paid_at?: string | null;
+          payment_status?: Database["public"]["Enums"]["order_payment_status"];
+          provider_commission_bps?: number;
+          provider_commission_halalas?: number;
+          provider_id?: string;
+          provider_net_halalas?: number;
+          provider_service_id?: string | null;
+          refunded_at?: string | null;
+          request_id?: string;
+          total_paid_halalas?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "orders_bid_id_fkey";
+            columns: ["bid_id"];
+            isOneToOne: false;
+            referencedRelation: "bids";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_provider_service_id_fkey";
+            columns: ["provider_service_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_services";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: true;
+            referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payment_webhook_events: {
+        Row: {
+          event_id: string;
+          gateway: string;
+          outcome: string | null;
+          payload: NonNullable<Json>;
+          received_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          event_id: string;
+          gateway: string;
+          outcome?: string | null;
+          payload: NonNullable<Json>;
+          received_at?: string;
+        };
+        Update: {
+          event_id?: string;
+          gateway?: string;
+          outcome?: string | null;
+          payload?: NonNullable<Json>;
+          received_at?: string;
+        };
+        Relationships: [];
+      };
+      payments: {
+        Row: {
+          amount_halalas: number;
+          created_at: string;
+          currency: string;
+          failure_reason: string | null;
+          gateway: string;
+          gateway_payment_id: string | null;
+          id: string;
+          order_id: string;
+          paid_at: string | null;
+          provider_ref: string;
+          raw_webhook: Json | null;
+          refund_ref: string | null;
+          refunded_at: string | null;
+          status: Database["public"]["Enums"]["payment_status"];
+        };
+        ComputedFields: never;
+        Insert: {
+          amount_halalas: number;
+          created_at?: string;
+          currency?: string;
+          failure_reason?: string | null;
+          gateway: string;
+          gateway_payment_id?: string | null;
+          id?: string;
+          order_id: string;
+          paid_at?: string | null;
+          provider_ref: string;
+          raw_webhook?: Json | null;
+          refund_ref?: string | null;
+          refunded_at?: string | null;
+          status?: Database["public"]["Enums"]["payment_status"];
+        };
+        Update: {
+          amount_halalas?: number;
+          created_at?: string;
+          currency?: string;
+          failure_reason?: string | null;
+          gateway?: string;
+          gateway_payment_id?: string | null;
+          id?: string;
+          order_id?: string;
+          paid_at?: string | null;
+          provider_ref?: string;
+          raw_webhook?: Json | null;
+          refund_ref?: string | null;
+          refunded_at?: string | null;
+          status?: Database["public"]["Enums"]["payment_status"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
             referencedColumns: ["id"];
           },
         ];
@@ -652,6 +882,7 @@ export type Database = {
         Returns: undefined;
       };
       contains_contact_info: { Args: { p_text: string }; Returns: boolean };
+      create_order_for_request: { Args: { p_request_id: string }; Returns: string };
       create_service_request: {
         Args: {
           p_available_docs?: string[];
@@ -675,6 +906,29 @@ export type Database = {
       is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_awarded_provider: { Args: { p_request_id: string }; Returns: boolean };
       is_request_member: { Args: { p_request_id: string }; Returns: boolean };
+      ledger_transfer: {
+        Args: {
+          p_amount: number;
+          p_description: string;
+          p_from: Database["public"]["Enums"]["ledger_account"];
+          p_order_id: string;
+          p_payment_id: string;
+          p_reverses?: string;
+          p_to: Database["public"]["Enums"]["ledger_account"];
+        };
+        Returns: string;
+      };
+      mentions_credentials: { Args: { p_text: string }; Returns: boolean };
+      order_ledger_balances: {
+        Args: { p_order_id: string };
+        Returns: {
+          account: Database["public"]["Enums"]["ledger_account"];
+          balance_halalas: number;
+          credit_halalas: number;
+          debit_halalas: number;
+        }[];
+      };
+      pct_to_bps: { Args: { p_pct: Json }; Returns: number };
       provider_can_view_request: { Args: { p_request_id: string }; Returns: boolean };
       provider_is_editable: { Args: { p_provider_id: string }; Returns: boolean };
       public_provider: {
@@ -710,6 +964,39 @@ export type Database = {
           services_count: number;
         }[];
       };
+      record_payment_result: {
+        Args: {
+          p_amount_halalas: number;
+          p_currency: string;
+          p_event_id: string;
+          p_gateway: string;
+          p_gateway_payment_id: string;
+          p_provider_ref: string;
+          p_raw: Json;
+          p_status: string;
+        };
+        Returns: string;
+      };
+      record_refund: {
+        Args: {
+          p_amount_halalas: number;
+          p_cancel_request: boolean;
+          p_note?: string;
+          p_payment_id: string;
+          p_raw: Json;
+          p_refund_ref: string;
+        };
+        Returns: string;
+      };
+      register_payment_attempt: {
+        Args: {
+          p_amount_halalas: number;
+          p_gateway: string;
+          p_order_id: string;
+          p_provider_ref: string;
+        };
+        Returns: string;
+      };
       request_bids: {
         Args: { p_request_id: string };
         Returns: {
@@ -732,6 +1019,7 @@ export type Database = {
         Args: { p_action: string; p_provider_id: string; p_reason?: string };
         Returns: undefined;
       };
+      round_bps: { Args: { p_amount: number; p_bps: number }; Returns: number };
       submit_bid: {
         Args: {
           p_duration_days: number;
@@ -758,6 +1046,10 @@ export type Database = {
       bid_status: "submitted" | "withdrawn" | "accepted" | "rejected";
       delegation_platform: "qiwa" | "balady" | "mc" | "none";
       establishment_member_role: "owner" | "member";
+      ledger_account:
+        "client" | "escrow" | "platform_revenue" | "provider_payable" | "provider_paid";
+      order_payment_status: "unpaid" | "paid" | "refunded";
+      payment_status: "initiated" | "paid" | "failed" | "refunded";
       provider_document_type:
         "commercial_register" | "municipal_license" | "manager_id" | "iban_certificate";
       provider_verification_status: "pending" | "approved" | "rejected" | "suspended";
@@ -895,6 +1187,9 @@ export const Constants = {
       bid_status: ["submitted", "withdrawn", "accepted", "rejected"],
       delegation_platform: ["qiwa", "balady", "mc", "none"],
       establishment_member_role: ["owner", "member"],
+      ledger_account: ["client", "escrow", "platform_revenue", "provider_payable", "provider_paid"],
+      order_payment_status: ["unpaid", "paid", "refunded"],
+      payment_status: ["initiated", "paid", "failed", "refunded"],
       provider_document_type: [
         "commercial_register",
         "municipal_license",

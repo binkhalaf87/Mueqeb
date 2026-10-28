@@ -33,6 +33,12 @@ describe("formatHalalas", () => {
     expect(formatHalalas(123456700)).toBe("1,234,567 ر.س");
   });
 
+  it("keeps the sign for negative balances", () => {
+    expect(formatHalalas(-75600)).toBe("\u200E-756 ر.س");
+    expect(formatHalalas(-50)).toBe("\u200E-0.50 ر.س");
+    expect(formatHalalas(0)).toBe("0 ر.س");
+  });
+
   it("round-trips through the input format", () => {
     for (const h of [100, 15000, 15050, 99]) {
       expect(parseSarToHalalas(halalasToInput(h))).toBe(h);

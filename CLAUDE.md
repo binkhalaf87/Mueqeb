@@ -77,6 +77,9 @@ completed | disputed → resolved
   `node_modules/next/dist/docs/` قبل استخدام أي API.
 - التحقق من الدور يتم في الخادم داخل كل صفحة عبر `requireRole()` من `src/lib/auth/session.ts`؛
   الـ proxy فحص تفاؤلي فقط.
+- الدفع: كل كتابة مالية عبر دوال قاعدة البيانات بمفتاح الخدمة من الخادم (`src/lib/payments/process.ts`)،
+  والدفتر `ledger_entries` لا يُكتب إلا عبر `ledger_transfer` ولا يُعدّل أبداً. البوابة تُختار بـ `PAYMENT_PROVIDER`
+  (`mock` محلياً، `moyasar` بمفاتيح test فقط).
 - بعد أي migration: `npm run db:reset && npm run seed && npm run db:types`.
 - الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`
   ثم `npm run test:e2e` (يحتاج Supabase محلياً + seed).

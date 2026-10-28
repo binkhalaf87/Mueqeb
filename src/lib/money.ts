@@ -16,12 +16,18 @@ export function parseSarToHalalas(input: string): number | null {
   return riyals * 100 + halalas;
 }
 
-/** يعرض الهللات كريالات: 15000 → "150 ر.س" و 15050 → "150.50 ر.س" */
+/** يعرض الهللات كريالات: 15000 → "150 ر.س"، 15050 → "150.50 ر.س"، ‎-50 → "‎-0.50 ر.س" */
 export function formatHalalas(halalas: number): string {
-  const riyals = Math.trunc(halalas / 100);
-  const rest = Math.abs(halalas % 100);
+  const sign = halalas < 0 ? "-" : "";
+  const abs = Math.abs(halalas);
+  const riyals = Math.trunc(abs / 100);
+  const rest = abs % 100;
   const riyalsText = riyals.toLocaleString("en-US");
-  return rest === 0 ? `${riyalsText} ر.س` : `${riyalsText}.${String(rest).padStart(2, "0")} ر.س`;
+  // \u200E (LRM) يثبّت الإشارة السالبة قبل الرقم داخل النص العربي
+  const prefix = sign ? `\u200E${sign}` : "";
+  return rest === 0
+    ? `${prefix}${riyalsText} ر.س`
+    : `${prefix}${riyalsText}.${String(rest).padStart(2, "0")} ر.س`;
 }
 
 /** قيمة حقل إدخال بالريال من هللات: 15050 → "150.50" */

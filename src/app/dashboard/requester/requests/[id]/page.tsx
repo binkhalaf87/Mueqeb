@@ -37,8 +37,15 @@ export default async function RequesterRequestPage({
     .maybeSingle();
   if (!request) notFound();
 
-  const [{ data: bids }, { data: events }] = await Promise.all([
+  const [{ data: bids }, { data: order }, { data: events }] = await Promise.all([
     supabase.rpc("request_bids", { p_request_id: id }),
+    supabase
+      .from("orders")
+      .select(
+        "id, total_paid_halalas, payment_status, paid_at, refunded_at, payments(status, failure_reason, created_at)",
+      )
+      .eq("request_id", id)
+      .maybeSingle(),
     supabase
       .from("order_events")
       .select("id, from_status, to_status, actor_role, note, created_at")
@@ -53,7 +60,14 @@ export default async function RequesterRequestPage({
   const fastest = Math.min(...activeBids.map((b) => b.duration_days));
   const awarded = (bids ?? []).find((b) => b.id === request.awarded_bid_id);
   const details = request.request_private_details;
-  const cancellable = open || request.status === "awarded_unpaid";
+  // الإلغاء متاح قبل بدء التنفيذ؛ بعد الدفع يكون مع استرداد كامل
+  const cancellable = ["open", "awarded_unpaid", "paid", "awaiting_client"].includes(
+    request.status,
+  );
+  const paid = order?.payment_status === "paid";
+  const lastAttempt = [...(order?.payments ?? [])].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  )[0];
 
   return (
     <div className="space-y-6">
@@ -73,10 +87,43 @@ export default async function RequesterRequestPage({
             {awarded.office_name} — {formatHalalas(awarded.fee_halalas)} · {awarded.duration_days}{" "}
             يوم
           </p>
-          {request.status === "awarded_unpaid" && (
+          {request.status === "awarded_unpaid" && order && (
+            <div className="mt-3 space-y-2">
+              {lastAttempt?.status === "failed" && (
+                <p className="text-sm text-danger" data-testid="payment-failed">
+                  لم تنجح محاولة الدفع الأخيرة
+                  {lastAttempt.failure_reason ? `: ${lastAttempt.failure_reason}` : ""}. حاول
+                  مجدداً.
+                </p>
+              )}
+              <Link
+                href={`/dashboard/requester/requests/${request.id}/pay`}
+                className="inline-block rounded-lg bg-primary px-4 py-2 font-medium text-white hover:bg-primary-hover"
+              >
+                ادفع الآن — {formatHalalas(order.total_paid_halalas)}
+              </Link>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {order && order.payment_status !== "unpaid" && (
+        <Card data-testid="payment-status">
+          {paid ? (
+            <p>
+              ✓ دفعت <strong>{formatHalalas(order.total_paid_halalas)}</strong>
+              {order.paid_at && ` في ${formatDateTime(order.paid_at)}`}. المبلغ محفوظ لدى المنصة ولا
+              يُحوَّل للمكتب إلا بعد تأكيدك للإنجاز.
+            </p>
+          ) : (
+            <p>
+              أُعيد إليك المبلغ كاملاً ({formatHalalas(order.total_paid_halalas)})
+              {order.refunded_at && ` في ${formatDateTime(order.refunded_at)}`}.
+            </p>
+          )}
+          {request.status === "awaiting_client" && (
             <p className="mt-2 text-sm text-muted">
-              الخطوة التالية: الدفع (تُتاح في المرحلة القادمة). المبلغ محفوظ لدى المنصة حتى تأكيدك
-              للإنجاز.
+              الخطوة التالية: تفويض المكتب عبر المنصة الرسمية وتجهيز المستندات (المرحلة القادمة).
             </p>
           )}
         </Card>
@@ -199,10 +246,10 @@ export default async function RequesterRequestPage({
               <ActionButton
                 action={cancelRequest}
                 fields={{ requestId: request.id }}
-                confirmText="إلغاء الطلب؟"
+                confirmText={paid ? "إلغاء الطلب واسترداد المبلغ كاملاً؟" : "إلغاء الطلب؟"}
                 className="rounded-lg border border-border px-3 py-1.5 hover:border-danger hover:text-danger"
               >
-                إلغاء الطلب
+                {paid ? "إلغاء الطلب واسترداد المبلغ" : "إلغاء الطلب"}
               </ActionButton>
             </div>
           )}

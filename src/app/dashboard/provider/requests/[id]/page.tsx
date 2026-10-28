@@ -37,9 +37,17 @@ export default async function ProviderRequestPage({
   if (!request) notFound();
 
   // عرضي فقط (RLS)، والبيانات الخاصة تظهر فقط إذا رُسي الطلب عليّ (RLS)
-  const [{ data: myBid }, { data: details }] = await Promise.all([
+  const [{ data: myBid }, { data: details }, { data: order }] = await Promise.all([
     supabase.from("bids").select("*").eq("request_id", id).maybeSingle(),
     supabase.from("request_private_details").select("*").eq("request_id", id).maybeSingle(),
+    // الطلب المالي يظهر للمزوّد المُرسى عليه فقط (RLS)
+    supabase
+      .from("orders")
+      .select(
+        "fee_halalas, provider_commission_bps, provider_commission_halalas, provider_net_halalas, payment_status",
+      )
+      .eq("request_id", id)
+      .maybeSingle(),
   ]);
 
   const left = timeLeft(request.bids_deadline);
@@ -104,6 +112,33 @@ export default async function ProviderRequestPage({
           <p className="pt-1 text-xs text-muted">
             تبدأ الخدمة بعد دفع العميل. لا تطلب من العميل أبداً كلمات مرور أو رموز تحقق لحساباته
             الحكومية؛ التفويض يتم عبر المنصات الرسمية فقط.
+          </p>
+        </Card>
+      )}
+
+      {awardedToMe && order && (
+        <Card className="space-y-2 text-sm" data-testid="provider-order">
+          <h2 className="font-semibold">المستحقات</h2>
+          <dl className="grid gap-1 sm:max-w-sm">
+            <div className="flex justify-between">
+              <dt>أتعابك</dt>
+              <dd>{formatHalalas(order.fee_halalas)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt>عمولة المنصة ({order.provider_commission_bps / 100}%)</dt>
+              <dd>− {formatHalalas(order.provider_commission_halalas)}</dd>
+            </div>
+            <div className="flex justify-between border-t border-border pt-1 font-semibold">
+              <dt>صافي مستحقك</dt>
+              <dd>{formatHalalas(order.provider_net_halalas)}</dd>
+            </div>
+          </dl>
+          <p className="text-muted">
+            {order.payment_status === "paid"
+              ? "دفع العميل والمبلغ محفوظ لدى المنصة؛ يُستحق لك بعد تأكيد العميل للإنجاز."
+              : order.payment_status === "refunded"
+                ? "أُلغي الطلب وأُعيد المبلغ للعميل."
+                : "بانتظار دفع العميل. لا تبدأ العمل قبل الدفع."}
           </p>
         </Card>
       )}

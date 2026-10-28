@@ -52,6 +52,8 @@ describe.skipIf(!available)("requests, sealed bids & state machine (local Supaba
         .in("requester_account_id", accountIds);
       const requestIds = (requests ?? []).map((r) => r.id);
       if (requestIds.length) {
+        // الطلبات المالية تُنشأ تلقائياً عند الترسية (بلا مدفوعات أو قيود في هذه الاختبارات)
+        await admin.from("orders").delete().in("request_id", requestIds);
         await admin.from("service_requests").update({ awarded_bid_id: null }).in("id", requestIds);
         await admin.from("bids").delete().in("request_id", requestIds);
         await admin.from("service_requests").delete().in("id", requestIds);

@@ -15,6 +15,15 @@ npm run seed                       # مستخدمون تجريبيون
 npm run dev                        # http://localhost:3000
 ```
 
+## الدفع (وضع الاختبار فقط)
+
+- `PAYMENT_PROVIDER=mock` (الافتراضي محلياً): بوابة اختبار محلية بصفحة دفع مستضافة وwebhook موقّع (HMAC).
+  - بطاقة ناجحة: `4111 1111 1111 1111`
+  - بطاقة مرفوضة: `4000 0000 0000 0002`
+- `PAYMENT_PROVIDER=moyasar`: يتطلب `MOYASAR_SECRET_KEY=sk_test_…` و`MOYASAR_WEBHOOK_SECRET`، ويرفض المفاتيح الحية.
+  - عنوان الـ webhook: `/api/payments/webhook`.
+  - بطاقات Moyasar التجريبية من توثيقها.
+
 ## الأوامر
 
 | الأمر                                         | الوظيفة                                                                      |

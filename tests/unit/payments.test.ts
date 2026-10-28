@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { calcOrderAmounts, ledgerImbalance, pctToBps, roundBps } from "@/lib/payments/amounts";
+import {
+  calcOrderAmounts,
+  calcSettlement,
+  cancellationAfterStartRefund,
+  ledgerImbalance,
+  pctToBps,
+  roundBps,
+} from "@/lib/payments/amounts";
 import { MOCK_TEST_CARDS, MockGateway, signMockPayload } from "@/lib/payments/mock-gateway";
 import { MoyasarGateway } from "@/lib/payments/moyasar";
 import { WebhookVerificationError } from "@/lib/payments/types";
@@ -283,5 +290,58 @@ describe("MoyasarGateway (test mode only)", () => {
       gatewayPaymentId: "pay_1",
       status: "paid",
     });
+  });
+});
+
+describe("calcSettlement (escrow distribution on close)", () => {
+  const order = { feeHalalas: 20_000, clientFeeHalalas: 1_000, commissionBps: 1500 };
+
+  it("completion: platform gets fee + commission, provider the net", () => {
+    expect(calcSettlement(order, 0)).toEqual({
+      refundHalalas: 0,
+      providerPayableHalalas: 17_000,
+      platformRevenueHalalas: 4_000,
+    });
+  });
+
+  it("partial refund comes out of the provider fee; commission recomputed", () => {
+    // 75.50 ر.س مسترد → أتعاب متبقية 124.50 → عمولة 18.675 → 18.68
+    expect(calcSettlement(order, 7_550)).toEqual({
+      refundHalalas: 7_550,
+      providerPayableHalalas: 12_450 - 1_868,
+      platformRevenueHalalas: 1_000 + 1_868,
+    });
+  });
+
+  it("full refund returns the whole total", () => {
+    expect(calcSettlement(order, 21_000)).toEqual({
+      refundHalalas: 21_000,
+      providerPayableHalalas: 0,
+      platformRevenueHalalas: 0,
+    });
+  });
+
+  it("rejects refunds above the fee that are not a full refund", () => {
+    expect(() => calcSettlement(order, 20_001)).toThrow();
+    expect(() => calcSettlement(order, -1)).toThrow();
+  });
+
+  it("always distributes exactly what is in escrow", () => {
+    for (let fee = 1; fee < 30_000; fee += 997) {
+      const o = { feeHalalas: fee, clientFeeHalalas: roundBps(fee, 500), commissionBps: 1500 };
+      for (const refund of [0, 1, Math.floor(fee / 3), fee, fee + o.clientFeeHalalas]) {
+        if (refund > fee && refund !== fee + o.clientFeeHalalas) continue;
+        const s = calcSettlement(o, refund);
+        expect(s.refundHalalas + s.providerPayableHalalas + s.platformRevenueHalalas).toBe(
+          fee + o.clientFeeHalalas,
+        );
+      }
+    }
+  });
+
+  it("cancellation after start keeps the provider share", () => {
+    expect(cancellationAfterStartRefund(33_333, 3000)).toBe(33_333 - 10_000); // 9,999.9 → 10,000
+    expect(cancellationAfterStartRefund(10_000, 0)).toBe(10_000);
+    expect(cancellationAfterStartRefund(10_000, 10_000)).toBe(0);
   });
 });

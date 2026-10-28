@@ -61,3 +61,43 @@ export type LedgerLine = { account: string; debit_halalas: number; credit_halala
 export function ledgerImbalance(lines: LedgerLine[]): number {
   return lines.reduce((sum, l) => sum + Number(l.debit_halalas) - Number(l.credit_halalas), 0);
 }
+
+export type Settlement = {
+  refundHalalas: number;
+  providerPayableHalalas: number;
+  platformRevenueHalalas: number;
+};
+
+/**
+ * توزيع الضمان عند إغلاق الطلب — مطابق لـ public.settle_order_ledger:
+ * - استرداد = الإجمالي: كل المبلغ للعميل.
+ * - 0 ≤ استرداد ≤ الأتعاب: يُخصم من أتعاب المزوّد، والعمولة على الأتعاب المتبقية، ورسم الخدمة للمنصة.
+ */
+export function calcSettlement(
+  order: { feeHalalas: number; clientFeeHalalas: number; commissionBps: number },
+  refundHalalas: number,
+): Settlement {
+  const total = order.feeHalalas + order.clientFeeHalalas;
+  if (refundHalalas === total) {
+    return { refundHalalas, providerPayableHalalas: 0, platformRevenueHalalas: 0 };
+  }
+  if (
+    !Number.isSafeInteger(refundHalalas) ||
+    refundHalalas < 0 ||
+    refundHalalas > order.feeHalalas
+  ) {
+    throw new RangeError(`مبلغ استرداد غير صالح: ${refundHalalas}`);
+  }
+  const kept = order.feeHalalas - refundHalalas;
+  const commission = roundBps(kept, order.commissionBps);
+  return {
+    refundHalalas,
+    providerPayableHalalas: kept - commission,
+    platformRevenueHalalas: order.clientFeeHalalas + commission,
+  };
+}
+
+/** ما يُسترد للعميل عند الإلغاء بعد البدء: الأتعاب ناقص حصة المزوّد (نسبة من الإعدادات) */
+export function cancellationAfterStartRefund(feeHalalas: number, providerShareBps: number) {
+  return feeHalalas - roundBps(feeHalalas, providerShareBps);
+}

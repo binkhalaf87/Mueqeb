@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { refundPayment } from "@/lib/payments/process";
+import { cancelInProgress } from "@/lib/execution/cancel";
 import { fieldErrors } from "@/lib/auth/validation";
 import { rpcErrorMessage } from "@/lib/requests/constants";
 import { createRequestSchema } from "@/lib/requests/validation";
@@ -64,7 +65,7 @@ export async function acceptBid(_prev: FormState, formData: FormData): Promise<F
 }
 
 export async function cancelRequest(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireRole("requester");
+  const user = await requireRole("requester");
   const requestId = String(formData.get("requestId") ?? "");
   const supabase = await createClient();
 
@@ -77,6 +78,9 @@ export async function cancelRequest(_prev: FormState, formData: FormData): Promi
   if (!request) return { message: "الطلب غير متاح." };
 
   const order = request.orders;
+  // بعد بدء التنفيذ: يُحتسب جزء من الأتعاب للمزوّد حسب الإعدادات
+  if (request.status === "in_progress") return cancelInProgress(requestId, user.id);
+
   if (order?.payment_status === "paid") {
     // الإلغاء قبل بدء التنفيذ: استرداد كامل عبر البوابة ثم قيد عكسي وإلغاء في معاملة واحدة
     if (request.status !== "paid" && request.status !== "awaiting_client") {

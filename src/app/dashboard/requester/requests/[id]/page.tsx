@@ -15,6 +15,8 @@ import { acceptBid, cancelRequest } from "@/app/actions/requests";
 import { ActionButton } from "@/components/action-button";
 import { RequestStatusBadge } from "@/components/request-status-badge";
 import { Badge, Card, PageTitle } from "@/components/ui";
+import { RequesterExecutionPanel } from "./execution-panel";
+import { RequesterChats } from "./requester-chats";
 
 export const metadata: Metadata = { title: "تفاصيل الطلب" };
 
@@ -23,7 +25,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function RequesterRequestPage({
   params,
 }: PageProps<"/dashboard/requester/requests/[id]">) {
-  await requireRole("requester");
+  const user = await requireRole("requester");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const supabase = await createClient();
@@ -42,7 +44,7 @@ export default async function RequesterRequestPage({
     supabase
       .from("orders")
       .select(
-        "id, total_paid_halalas, payment_status, paid_at, refunded_at, payments(status, failure_reason, created_at)",
+        "id, total_paid_halalas, payment_status, paid_at, refunded_at, refunded_halalas, settled_at, payments(status, failure_reason, created_at)",
       )
       .eq("request_id", id)
       .maybeSingle(),
@@ -61,10 +63,15 @@ export default async function RequesterRequestPage({
   const awarded = (bids ?? []).find((b) => b.id === request.awarded_bid_id);
   const details = request.request_private_details;
   // الإلغاء متاح قبل بدء التنفيذ؛ بعد الدفع يكون مع استرداد كامل
-  const cancellable = ["open", "awarded_unpaid", "paid", "awaiting_client"].includes(
+  // الإلغاء: قبل البدء باسترداد كامل، وبعد البدء يُحتسب جزء من الأتعاب للمكتب
+  const cancellable = ["open", "awarded_unpaid", "paid", "awaiting_client", "in_progress"].includes(
     request.status,
   );
   const paid = order?.payment_status === "paid";
+  const inProgress = request.status === "in_progress";
+  const { data: cancelRefund } = inProgress
+    ? await supabase.rpc("cancellation_after_start_refund", { p_request_id: id })
+    : { data: null };
   const lastAttempt = [...(order?.payments ?? [])].sort((a, b) =>
     b.created_at.localeCompare(a.created_at),
   )[0];
@@ -109,27 +116,35 @@ export default async function RequesterRequestPage({
 
       {order && order.payment_status !== "unpaid" && (
         <Card data-testid="payment-status">
-          {paid ? (
+          {order.payment_status === "refunded" ? (
+            <p>
+              أُعيد إليك المبلغ كاملاً ({formatHalalas(order.total_paid_halalas)})
+              {order.refunded_at && ` في ${formatDateTime(order.refunded_at)}`}.
+            </p>
+          ) : order.payment_status === "partially_refunded" ? (
+            <p>
+              دفعت {formatHalalas(order.total_paid_halalas)}، واستُرد لك{" "}
+              <strong>{formatHalalas(order.refunded_halalas)}</strong>
+              {order.refunded_at && ` في ${formatDateTime(order.refunded_at)}`}.
+            </p>
+          ) : order.settled_at ? (
+            <p>
+              ✓ دفعت <strong>{formatHalalas(order.total_paid_halalas)}</strong> وحُوّل مستحق المكتب
+              بعد إكمال الطلب.
+            </p>
+          ) : (
             <p>
               ✓ دفعت <strong>{formatHalalas(order.total_paid_halalas)}</strong>
               {order.paid_at && ` في ${formatDateTime(order.paid_at)}`}. المبلغ محفوظ لدى المنصة ولا
               يُحوَّل للمكتب إلا بعد تأكيدك للإنجاز.
             </p>
-          ) : (
-            <p>
-              أُعيد إليك المبلغ كاملاً ({formatHalalas(order.total_paid_halalas)})
-              {order.refunded_at && ` في ${formatDateTime(order.refunded_at)}`}.
-            </p>
-          )}
-          {request.status === "awaiting_client" && (
-            <p className="mt-2 text-sm text-muted">
-              الخطوة التالية: تفويض المكتب عبر المنصة الرسمية وتجهيز المستندات (المرحلة القادمة).
-            </p>
           )}
         </Card>
       )}
 
-      {request.mode !== "direct_listed" && (
+      <RequesterExecutionPanel requestId={request.id} />
+
+      {request.mode !== "direct_listed" && request.status === "open" && (
         <Card className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-4">
             <h2 className="font-semibold">العروض ({bids?.length ?? 0})</h2>
@@ -246,10 +261,20 @@ export default async function RequesterRequestPage({
               <ActionButton
                 action={cancelRequest}
                 fields={{ requestId: request.id }}
-                confirmText={paid ? "إلغاء الطلب واسترداد المبلغ كاملاً؟" : "إلغاء الطلب؟"}
+                confirmText={
+                  inProgress
+                    ? `بدأ المكتب التنفيذ: يُحتسب له جزء من أتعابه ويُسترد لك ${formatHalalas(cancelRefund ?? 0)}. هل تريد الإلغاء؟`
+                    : paid
+                      ? "إلغاء الطلب واسترداد المبلغ كاملاً؟"
+                      : "إلغاء الطلب؟"
+                }
                 className="rounded-lg border border-border px-3 py-1.5 hover:border-danger hover:text-danger"
               >
-                {paid ? "إلغاء الطلب واسترداد المبلغ" : "إلغاء الطلب"}
+                {inProgress
+                  ? `إلغاء الطلب (يُسترد ${formatHalalas(cancelRefund ?? 0)})`
+                  : paid
+                    ? "إلغاء الطلب واسترداد المبلغ"
+                    : "إلغاء الطلب"}
               </ActionButton>
             </div>
           )}
@@ -270,6 +295,17 @@ export default async function RequesterRequestPage({
           </ol>
         </Card>
       </div>
+
+      <RequesterChats
+        requestId={request.id}
+        status={request.status}
+        currentUserId={user.id}
+        awardedProviderId={awarded?.provider_id ?? null}
+        targetProviderId={request.target_provider_id}
+        bidders={(bids ?? [])
+          .filter((b) => b.status !== "withdrawn")
+          .map((b) => ({ providerId: b.provider_id, officeName: b.office_name }))}
+      />
     </div>
   );
 }

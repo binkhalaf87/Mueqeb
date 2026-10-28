@@ -80,6 +80,9 @@ completed | disputed → resolved
 - الدفع: كل كتابة مالية عبر دوال قاعدة البيانات بمفتاح الخدمة من الخادم (`src/lib/payments/process.ts`)،
   والدفتر `ledger_entries` لا يُكتب إلا عبر `ledger_transfer` ولا يُعدّل أبداً. البوابة تُختار بـ `PAYMENT_PROVIDER`
   (`mock` محلياً، `moyasar` بمفاتيح test فقط).
+- المحادثة تعتمد على Supabase Realtime: لا تستثنِ `realtime` عند `supabase start`.
+- آلة الحالات: `transition_request` (يحدد المنفّذ من الجلسة) و`transition_request_as` (داخلية بمنفّذ صريح).
+  أي إغلاق لطلب مدفوع يتطلب تسوية الضمان أولاً (`settle_order_ledger`).
 - بعد أي migration: `npm run db:reset && npm run seed && npm run db:types`.
 - الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`
   ثم `npm run test:e2e` (يحتاج Supabase محلياً + seed).

@@ -81,6 +81,151 @@ export type Database = {
           },
         ];
       };
+      blocked_messages: {
+        Row: {
+          body: string;
+          created_at: string;
+          id: number;
+          matched_term: string;
+          provider_id: string | null;
+          request_id: string;
+          sender_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          body: string;
+          created_at?: string;
+          id?: never;
+          matched_term: string;
+          provider_id?: string | null;
+          request_id: string;
+          sender_id: string;
+        };
+        Update: {
+          body?: string;
+          created_at?: string;
+          id?: never;
+          matched_term?: string;
+          provider_id?: string | null;
+          request_id?: string;
+          sender_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "blocked_messages_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "blocked_messages_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "blocked_messages_sender_id_fkey";
+            columns: ["sender_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      delegation_guides: {
+        Row: {
+          platform: Database["public"]["Enums"]["delegation_platform"];
+          steps: string[];
+          title: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          platform: Database["public"]["Enums"]["delegation_platform"];
+          steps: string[];
+          title: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          platform?: Database["public"]["Enums"]["delegation_platform"];
+          steps?: string[];
+          title?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "delegation_guides_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      disputes: {
+        Row: {
+          decision: Database["public"]["Enums"]["dispute_decision"] | null;
+          decision_note: string | null;
+          opened_at: string;
+          opened_by: string;
+          reason: string;
+          refund_halalas: number | null;
+          request_id: string;
+          resolved_at: string | null;
+          resolved_by: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          decision?: Database["public"]["Enums"]["dispute_decision"] | null;
+          decision_note?: string | null;
+          opened_at?: string;
+          opened_by: string;
+          reason: string;
+          refund_halalas?: number | null;
+          request_id: string;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+        };
+        Update: {
+          decision?: Database["public"]["Enums"]["dispute_decision"] | null;
+          decision_note?: string | null;
+          opened_at?: string;
+          opened_by?: string;
+          reason?: string;
+          refund_halalas?: number | null;
+          request_id?: string;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "disputes_opened_by_fkey";
+            columns: ["opened_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "disputes_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: true;
+            referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "disputes_resolved_by_fkey";
+            columns: ["resolved_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       establishment_members: {
         Row: {
           account_id: string;
@@ -173,6 +318,62 @@ export type Database = {
           },
         ];
       };
+      messages: {
+        Row: {
+          body: string;
+          created_at: string;
+          id: number;
+          provider_id: string;
+          request_id: string;
+          sender_id: string;
+          sender_role: string;
+          was_masked: boolean;
+        };
+        ComputedFields: never;
+        Insert: {
+          body: string;
+          created_at?: string;
+          id?: never;
+          provider_id: string;
+          request_id: string;
+          sender_id: string;
+          sender_role: string;
+          was_masked?: boolean;
+        };
+        Update: {
+          body?: string;
+          created_at?: string;
+          id?: never;
+          provider_id?: string;
+          request_id?: string;
+          sender_id?: string;
+          sender_role?: string;
+          was_masked?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "messages_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey";
+            columns: ["sender_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       order_events: {
         Row: {
           actor_id: string | null;
@@ -233,13 +434,18 @@ export type Database = {
           id: string;
           paid_at: string | null;
           payment_status: Database["public"]["Enums"]["order_payment_status"];
+          platform_revenue_halalas: number | null;
           provider_commission_bps: number;
           provider_commission_halalas: number;
           provider_id: string;
           provider_net_halalas: number;
+          provider_payable_halalas: number | null;
           provider_service_id: string | null;
           refunded_at: string | null;
+          refunded_halalas: number;
           request_id: string;
+          settled_at: string | null;
+          settlement: string | null;
           total_paid_halalas: number;
         };
         ComputedFields: never;
@@ -253,13 +459,18 @@ export type Database = {
           id?: string;
           paid_at?: string | null;
           payment_status?: Database["public"]["Enums"]["order_payment_status"];
+          platform_revenue_halalas?: number | null;
           provider_commission_bps: number;
           provider_commission_halalas: number;
           provider_id: string;
           provider_net_halalas: number;
+          provider_payable_halalas?: number | null;
           provider_service_id?: string | null;
           refunded_at?: string | null;
+          refunded_halalas?: number;
           request_id: string;
+          settled_at?: string | null;
+          settlement?: string | null;
           total_paid_halalas: number;
         };
         Update: {
@@ -272,13 +483,18 @@ export type Database = {
           id?: string;
           paid_at?: string | null;
           payment_status?: Database["public"]["Enums"]["order_payment_status"];
+          platform_revenue_halalas?: number | null;
           provider_commission_bps?: number;
           provider_commission_halalas?: number;
           provider_id?: string;
           provider_net_halalas?: number;
+          provider_payable_halalas?: number | null;
           provider_service_id?: string | null;
           refunded_at?: string | null;
+          refunded_halalas?: number;
           request_id?: string;
+          settled_at?: string | null;
+          settlement?: string | null;
           total_paid_halalas?: number;
         };
         Relationships: [
@@ -352,6 +568,7 @@ export type Database = {
           raw_webhook: Json | null;
           refund_ref: string | null;
           refunded_at: string | null;
+          refunded_halalas: number;
           status: Database["public"]["Enums"]["payment_status"];
         };
         ComputedFields: never;
@@ -369,6 +586,7 @@ export type Database = {
           raw_webhook?: Json | null;
           refund_ref?: string | null;
           refunded_at?: string | null;
+          refunded_halalas?: number;
           status?: Database["public"]["Enums"]["payment_status"];
         };
         Update: {
@@ -385,6 +603,7 @@ export type Database = {
           raw_webhook?: Json | null;
           refund_ref?: string | null;
           refunded_at?: string | null;
+          refunded_halalas?: number;
           status?: Database["public"]["Enums"]["payment_status"];
         };
         Relationships: [
@@ -586,6 +805,61 @@ export type Database = {
           },
         ];
       };
+      request_documents: {
+        Row: {
+          created_at: string;
+          file_name: string;
+          id: string;
+          kind: Database["public"]["Enums"]["request_document_kind"];
+          label: string;
+          mime_type: string;
+          request_id: string;
+          size_bytes: number;
+          storage_path: string;
+          uploaded_by: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          file_name: string;
+          id?: string;
+          kind: Database["public"]["Enums"]["request_document_kind"];
+          label: string;
+          mime_type: string;
+          request_id: string;
+          size_bytes: number;
+          storage_path: string;
+          uploaded_by: string;
+        };
+        Update: {
+          created_at?: string;
+          file_name?: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["request_document_kind"];
+          label?: string;
+          mime_type?: string;
+          request_id?: string;
+          size_bytes?: number;
+          storage_path?: string;
+          uploaded_by?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "request_documents_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "request_documents_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       request_private_details: {
         Row: {
           contact_email: string | null;
@@ -698,14 +972,21 @@ export type Database = {
           awarded_bid_id: string | null;
           bids_deadline: string | null;
           city: string;
+          closed_at: string | null;
           created_at: string;
           created_by: string;
+          delegation_confirmed_at: string | null;
+          delivered_at: string | null;
+          delivery_note: string | null;
           description: string;
+          due_at: string | null;
           id: string;
+          is_late: boolean;
           mode: Database["public"]["Enums"]["request_mode"];
           published_at: string | null;
           requester_account_id: string;
           service_type_id: string;
+          started_at: string | null;
           status: Database["public"]["Enums"]["request_status"];
           target_provider_id: string | null;
           updated_at: string;
@@ -717,14 +998,21 @@ export type Database = {
           awarded_bid_id?: string | null;
           bids_deadline?: string | null;
           city: string;
+          closed_at?: string | null;
           created_at?: string;
           created_by: string;
+          delegation_confirmed_at?: string | null;
+          delivered_at?: string | null;
+          delivery_note?: string | null;
           description?: string;
+          due_at?: string | null;
           id?: string;
+          is_late?: boolean;
           mode: Database["public"]["Enums"]["request_mode"];
           published_at?: string | null;
           requester_account_id: string;
           service_type_id: string;
+          started_at?: string | null;
           status?: Database["public"]["Enums"]["request_status"];
           target_provider_id?: string | null;
           updated_at?: string;
@@ -735,14 +1023,21 @@ export type Database = {
           awarded_bid_id?: string | null;
           bids_deadline?: string | null;
           city?: string;
+          closed_at?: string | null;
           created_at?: string;
           created_by?: string;
+          delegation_confirmed_at?: string | null;
+          delivered_at?: string | null;
+          delivery_note?: string | null;
           description?: string;
+          due_at?: string | null;
           id?: string;
+          is_late?: boolean;
           mode?: Database["public"]["Enums"]["request_mode"];
           published_at?: string | null;
           requester_account_id?: string;
           service_type_id?: string;
+          started_at?: string | null;
           status?: Database["public"]["Enums"]["request_status"];
           target_provider_id?: string | null;
           updated_at?: string;
@@ -871,6 +1166,16 @@ export type Database = {
     };
     Functions: {
       accept_bid: { Args: { p_bid_id: string }; Returns: undefined };
+      blocked_term_in: { Args: { p_text: string }; Returns: string };
+      can_access_thread: {
+        Args: { p_provider_id: string; p_request_id: string };
+        Returns: boolean;
+      };
+      cancel_after_start: {
+        Args: { p_actor?: string; p_actor_id: string; p_refund_ref: string; p_request_id: string };
+        Returns: number;
+      };
+      cancellation_after_start_refund: { Args: { p_request_id: string }; Returns: number };
       complete_onboarding: {
         Args: {
           p_account_type?: Database["public"]["Enums"]["requester_account_type"];
@@ -881,6 +1186,8 @@ export type Database = {
         };
         Returns: undefined;
       };
+      confirm_completion: { Args: { p_request_id: string }; Returns: undefined };
+      confirm_delegation: { Args: { p_request_id: string }; Returns: undefined };
       contains_contact_info: { Args: { p_text: string }; Returns: boolean };
       create_order_for_request: { Args: { p_request_id: string }; Returns: string };
       create_service_request: {
@@ -900,6 +1207,7 @@ export type Database = {
       current_provider_id: { Args: Record<PropertyKey, never>; Returns: string };
       current_provider_is_approved: { Args: Record<PropertyKey, never>; Returns: boolean };
       expire_stale_requests: { Args: Record<PropertyKey, never>; Returns: number };
+      format_sar: { Args: { p_halalas: number }; Returns: string };
       int_setting: { Args: { p_key: string }; Returns: number };
       is_account_member: { Args: { p_account_id: string }; Returns: boolean };
       is_account_owner: { Args: { p_account_id: string }; Returns: boolean };
@@ -918,7 +1226,9 @@ export type Database = {
         };
         Returns: string;
       };
+      mask_contact_info: { Args: { p_text: string }; Returns: string };
       mentions_credentials: { Args: { p_text: string }; Returns: boolean };
+      open_dispute: { Args: { p_reason: string; p_request_id: string }; Returns: undefined };
       order_ledger_balances: {
         Args: { p_order_id: string };
         Returns: {
@@ -931,6 +1241,14 @@ export type Database = {
       pct_to_bps: { Args: { p_pct: Json }; Returns: number };
       provider_can_view_request: { Args: { p_request_id: string }; Returns: boolean };
       provider_is_editable: { Args: { p_provider_id: string }; Returns: boolean };
+      provider_performance: {
+        Args: { p_provider_id: string };
+        Returns: {
+          completed_orders: number;
+          late_orders: number;
+          on_time_pct: number;
+        }[];
+      };
       public_provider: {
         Args: { p_provider_id: string };
         Returns: {
@@ -1015,11 +1333,37 @@ export type Database = {
           submitted_at: string;
         }[];
       };
+      resolve_dispute: {
+        Args: {
+          p_admin_id: string;
+          p_decision: Database["public"]["Enums"]["dispute_decision"];
+          p_note: string;
+          p_refund_halalas: number;
+          p_refund_ref: string;
+          p_request_id: string;
+        };
+        Returns: undefined;
+      };
       review_provider: {
         Args: { p_action: string; p_provider_id: string; p_reason?: string };
         Returns: undefined;
       };
       round_bps: { Args: { p_amount: number; p_bps: number }; Returns: number };
+      run_order_maintenance: { Args: Record<PropertyKey, never>; Returns: Json };
+      send_message: {
+        Args: { p_body: string; p_provider_id: string; p_request_id: string };
+        Returns: Json;
+      };
+      settle_order_ledger: {
+        Args: {
+          p_order_id: string;
+          p_refund_halalas: number;
+          p_refund_ref: string;
+          p_settlement: string;
+        };
+        Returns: undefined;
+      };
+      start_execution: { Args: { p_request_id: string }; Returns: undefined };
       submit_bid: {
         Args: {
           p_duration_days: number;
@@ -1031,9 +1375,20 @@ export type Database = {
         };
         Returns: string;
       };
+      submit_delivery: { Args: { p_note: string; p_request_id: string }; Returns: undefined };
       submit_provider_for_review: { Args: Record<PropertyKey, never>; Returns: undefined };
       transition_request: {
         Args: {
+          p_note?: string;
+          p_request_id: string;
+          p_to: Database["public"]["Enums"]["request_status"];
+        };
+        Returns: undefined;
+      };
+      transition_request_as: {
+        Args: {
+          p_actor: string;
+          p_actor_id: string;
           p_note?: string;
           p_request_id: string;
           p_to: Database["public"]["Enums"]["request_status"];
@@ -1045,14 +1400,16 @@ export type Database = {
     Enums: {
       bid_status: "submitted" | "withdrawn" | "accepted" | "rejected";
       delegation_platform: "qiwa" | "balady" | "mc" | "none";
+      dispute_decision: "provider" | "full_refund" | "partial_refund";
       establishment_member_role: "owner" | "member";
       ledger_account:
         "client" | "escrow" | "platform_revenue" | "provider_payable" | "provider_paid";
-      order_payment_status: "unpaid" | "paid" | "refunded";
-      payment_status: "initiated" | "paid" | "failed" | "refunded";
+      order_payment_status: "unpaid" | "paid" | "refunded" | "partially_refunded";
+      payment_status: "initiated" | "paid" | "failed" | "refunded" | "partially_refunded";
       provider_document_type:
         "commercial_register" | "municipal_license" | "manager_id" | "iban_certificate";
       provider_verification_status: "pending" | "approved" | "rejected" | "suspended";
+      request_document_kind: "client_document" | "delivery_proof";
       request_mode: "direct_listed" | "direct_quote" | "public";
       request_status:
         | "draft"
@@ -1186,10 +1543,11 @@ export const Constants = {
     Enums: {
       bid_status: ["submitted", "withdrawn", "accepted", "rejected"],
       delegation_platform: ["qiwa", "balady", "mc", "none"],
+      dispute_decision: ["provider", "full_refund", "partial_refund"],
       establishment_member_role: ["owner", "member"],
       ledger_account: ["client", "escrow", "platform_revenue", "provider_payable", "provider_paid"],
-      order_payment_status: ["unpaid", "paid", "refunded"],
-      payment_status: ["initiated", "paid", "failed", "refunded"],
+      order_payment_status: ["unpaid", "paid", "refunded", "partially_refunded"],
+      payment_status: ["initiated", "paid", "failed", "refunded", "partially_refunded"],
       provider_document_type: [
         "commercial_register",
         "municipal_license",
@@ -1197,6 +1555,7 @@ export const Constants = {
         "iban_certificate",
       ],
       provider_verification_status: ["pending", "approved", "rejected", "suspended"],
+      request_document_kind: ["client_document", "delivery_proof"],
       request_mode: ["direct_listed", "direct_quote", "public"],
       request_status: [
         "draft",

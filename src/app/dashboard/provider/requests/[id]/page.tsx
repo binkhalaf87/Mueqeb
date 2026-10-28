@@ -12,6 +12,9 @@ import { ActionButton } from "@/components/action-button";
 import { RequestStatusBadge } from "@/components/request-status-badge";
 import { Badge, Card, PageTitle } from "@/components/ui";
 import { BidForm } from "./bid-form";
+import { ProviderExecutionPanel } from "./execution-panel";
+import { Chat } from "@/components/chat";
+import { getThreadMessages } from "@/lib/execution/queries";
 
 export const metadata: Metadata = { title: "تفاصيل طلب" };
 
@@ -57,6 +60,9 @@ export default async function ProviderRequestPage({
     Boolean(left) &&
     (!myBid || myBid.status === "submitted" || myBid.status === "withdrawn");
   const awardedToMe = myBid?.status === "accepted";
+  // خيط المحادثة: إذا قدّمتُ عرضاً أو كان الطلب موجّهاً إليّ
+  const showChat = Boolean(myBid) || request.mode === "direct_quote";
+  const messages = showChat ? await getThreadMessages(request.id, provider.id) : [];
 
   return (
     <div className="space-y-6">
@@ -143,6 +149,8 @@ export default async function ProviderRequestPage({
         </Card>
       )}
 
+      {awardedToMe && <ProviderExecutionPanel requestId={request.id} />}
+
       {myBid && (
         <Card className="space-y-2 text-sm" data-testid="my-bid">
           <div className="flex flex-wrap items-center gap-3">
@@ -196,6 +204,17 @@ export default async function ProviderRequestPage({
             }
           />
         </Card>
+      )}
+
+      {showChat && (
+        <Chat
+          requestId={request.id}
+          providerId={provider.id}
+          initialMessages={messages}
+          currentUserId={user.id}
+          title="المحادثة مع العميل"
+          closed={["completed", "resolved", "cancelled", "expired"].includes(request.status)}
+        />
       )}
     </div>
   );

@@ -401,6 +401,32 @@ describe.skipIf(!available)("orders, payments & append-only ledger (local Supaba
     const b = await attempt(second.order.id, second.order.total_paid_halalas);
     expect((await result(a.ref, second.order.total_paid_halalas)).data).toBe("processed");
     expect((await result(b.ref, second.order.total_paid_halalas)).data).toBe("refund_required");
+
+    // كما يفعل التطبيق (applyPaymentEvent): استرداد الدفعة الزائدة بقيد عكسي دون لمس الطلب
+    for (const [paymentId, amount] of [
+      [late.paymentId, order.total_paid_halalas],
+      [b.paymentId, second.order.total_paid_halalas],
+    ] as const) {
+      const { data } = await admin.rpc("record_refund", {
+        p_payment_id: paymentId,
+        p_refund_ref: "auto_refund",
+        p_amount_halalas: amount,
+        p_raw: {},
+        p_cancel_request: false,
+      });
+      expect(data).toBe("processed");
+    }
+    const lateBalances = await ledger(order.id);
+    expect(
+      lateBalances.reduce((s, l) => s + (l.account === "escrow" ? l.debit - l.credit : 0), 0),
+    ).toBe(0);
+    // الطلب الثاني يبقى مدفوعاً بدفعته الأولى
+    const { data: o } = await admin
+      .from("orders")
+      .select("payment_status")
+      .eq("id", second.order.id)
+      .single();
+    expect(o!.payment_status).toBe("paid");
   });
 
   it("RLS: who can see orders, payments and the ledger", async () => {

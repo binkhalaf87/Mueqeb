@@ -29,6 +29,9 @@ export default async function ProviderDashboard() {
     : [null, null];
 
   const stage = provider ? providerStage(provider) : "draft";
+  const { data: performance } = provider
+    ? await supabase.rpc("provider_performance", { p_provider_id: provider.id }).single()
+    : { data: null };
   const docsCount = docs?.count ?? 0;
   const servicesCount = services?.count ?? 0;
 
@@ -85,6 +88,17 @@ export default async function ProviderDashboard() {
           </Link>
         )}
       </Card>
+
+      {stage === "approved" && performance && (
+        <Card data-testid="provider-performance">
+          <h2 className="mb-2 font-semibold">أداؤك</h2>
+          <p className="text-sm">
+            طلبات منجزة: <strong>{performance.completed_orders}</strong> · متأخرة:{" "}
+            <strong>{performance.late_orders}</strong> · الالتزام بالموعد:{" "}
+            <strong>{performance.on_time_pct == null ? "—" : `${performance.on_time_pct}%`}</strong>
+          </p>
+        </Card>
+      )}
 
       <Card>
         <h2 className="mb-3 font-semibold">خطوات إكمال الملف</h2>

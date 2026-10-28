@@ -108,3 +108,27 @@ export async function refundPayment(
   if (recordError) throw recordError;
   return data;
 }
+
+/**
+ * استرداد مبلغ (كامل أو جزئي) من البوابة للدفعة المعتمدة للطلب، ويعيد مرجع الاسترداد.
+ * التسجيل في الدفتر يتم بعدها بدالة التسوية المناسبة في قاعدة البيانات.
+ */
+export async function refundAtGateway(orderId: string, amountHalalas: number) {
+  if (amountHalalas <= 0) return null;
+  const admin = createAdminClient();
+  const { data: payment, error } = await admin
+    .from("payments")
+    .select("provider_ref, gateway_payment_id")
+    .eq("order_id", orderId)
+    .eq("status", "paid")
+    .order("paid_at")
+    .limit(1)
+    .single();
+  if (error || !payment) throw error ?? new Error("paid payment not found");
+  const refund = await getPaymentProvider().refund({
+    providerRef: payment.provider_ref,
+    gatewayPaymentId: payment.gateway_payment_id,
+    amountHalalas,
+  });
+  return refund.refundRef;
+}

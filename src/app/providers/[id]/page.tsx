@@ -31,9 +31,10 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
   if (!provider) notFound();
 
   const supabase = await createClient();
-  const [{ data: services }, user] = await Promise.all([
+  const [{ data: services }, user, { data: performance }] = await Promise.all([
     supabase.rpc("public_provider_services", { p_provider_id: provider.id }),
     getCurrentUser(),
+    supabase.rpc("provider_performance", { p_provider_id: provider.id }).single(),
   ]);
   // أزرار الطلب لطالب الخدمة؛ والزائر يُدعى للدخول
   const canRequest = !user || user.role === "requester";
@@ -54,9 +55,13 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
       </section>
 
       <div className="grid gap-4 sm:grid-cols-3" data-testid="provider-stats">
-        <StatPlaceholder label="الطلبات المنجزة" />
+        <Stat label="الطلبات المنجزة" value={String(performance?.completed_orders ?? 0)} />
         <StatPlaceholder label="التقييم" />
-        <StatPlaceholder label="متوسط مدة الإنجاز" />
+        <Stat
+          label="الالتزام بالموعد"
+          value={performance?.on_time_pct == null ? "—" : `${performance.on_time_pct}%`}
+          hint={performance?.late_orders ? `${performance.late_orders} طلب متأخر` : undefined}
+        />
       </div>
 
       <Card>
@@ -103,6 +108,16 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
         </p>
       </Card>
     </div>
+  );
+}
+
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <Card className="p-4">
+      <p className="text-sm text-muted">{label}</p>
+      <p className="text-xl font-bold">{value}</p>
+      {hint && <p className="text-xs text-muted">{hint}</p>}
+    </Card>
   );
 }
 

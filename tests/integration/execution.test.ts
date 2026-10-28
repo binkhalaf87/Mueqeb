@@ -507,8 +507,8 @@ describe.skipIf(!available)("execution, delivery, disputes & chat (local Supabas
       .eq("id", late.requestId)
       .single();
     expect(flagged!.is_late).toBe(true);
-    const { data: perf } = await anonClient().rpc("provider_performance", {
-      p_provider_id: late.provider.providerId,
+    const { data: perf } = await anonClient().rpc("provider_stats", {
+      p_provider_ids: [late.provider.providerId],
     });
     expect(perf![0].late_orders).toBe(1);
 

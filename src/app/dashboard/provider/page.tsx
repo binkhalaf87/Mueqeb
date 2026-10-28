@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { getMyProvider } from "@/lib/providers/queries";
 import { providerStage } from "@/lib/providers/constants";
+import { getProviderStats } from "@/lib/providers/stats";
 import { ProviderStageBadge } from "@/components/provider-stage-badge";
 import { Card, PageTitle } from "@/components/ui";
 
@@ -29,9 +30,7 @@ export default async function ProviderDashboard() {
     : [null, null];
 
   const stage = provider ? providerStage(provider) : "draft";
-  const { data: performance } = provider
-    ? await supabase.rpc("provider_performance", { p_provider_id: provider.id }).single()
-    : { data: null };
+  const performance = provider ? (await getProviderStats([provider.id])).get(provider.id) : null;
   const docsCount = docs?.count ?? 0;
   const servicesCount = services?.count ?? 0;
 
@@ -95,7 +94,13 @@ export default async function ProviderDashboard() {
           <p className="text-sm">
             طلبات منجزة: <strong>{performance.completed_orders}</strong> · متأخرة:{" "}
             <strong>{performance.late_orders}</strong> · الالتزام بالموعد:{" "}
-            <strong>{performance.on_time_pct == null ? "—" : `${performance.on_time_pct}%`}</strong>
+            <strong>{performance.on_time_pct == null ? "—" : `${performance.on_time_pct}%`}</strong>{" "}
+            · التقييم:{" "}
+            <strong>
+              {performance.avg_rating == null
+                ? "—"
+                : `${Number(performance.avg_rating).toFixed(1)} (${performance.reviews_count})`}
+            </strong>
           </p>
         </Card>
       )}

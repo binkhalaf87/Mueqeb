@@ -361,11 +361,152 @@ async function seedSampleRequest() {
   console.log("✓ طلب تجريبي: طلب عام مفتوح (رخص عمل، الرياض) مع عرض من المزوّد 1");
 }
 
+/** عميل مسجّل الدخول بحساب seed (يمر بنفس صلاحيات المنصة وRLS) */
+async function signedIn(identifier: { email: string } | { phone: string }) {
+  const client = createClient<Database>(url!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { error } = await client.auth.signInWithPassword({
+    ...identifier,
+    password: SEED_PASSWORD,
+  });
+  if (error) throw error;
+  return client;
+}
+
+/**
+ * طلب مكتمل عبر الدورة الكاملة (دفع تجريبي، تفويض، تنفيذ، تسليم، تأكيد) ثم تقييم متبادل،
+ * ليظهر في إحصاءات المكتب وترتيبه.
+ */
+async function seedCompletedOrder(opts: {
+  providerEmail: string;
+  requester: { email: string } | { phone: string };
+  serviceSlug: string;
+  scores: [number, number, number];
+  comment: string;
+}) {
+  const requester = await signedIn(opts.requester);
+  const provider = await signedIn({ email: opts.providerEmail });
+  const { data: account } = await requester.from("requester_accounts").select("id").single();
+  const { data: type } = await requester
+    .from("service_types")
+    .select("id")
+    .eq("slug", opts.serviceSlug)
+    .single();
+  const { data: providerRow } = await supabase
+    .from("providers")
+    .select("id, cities, profile_id")
+    .eq("profile_id", (await provider.auth.getUser()).data.user!.id)
+    .single();
+
+  const { data: requestId, error } = await requester.rpc("create_service_request", {
+    p_requester_account_id: account!.id,
+    p_service_type_id: type!.id,
+    p_mode: "direct_listed",
+    p_target_provider_id: providerRow!.id,
+    p_city: providerRow!.cities[0],
+  });
+  if (error) throw error;
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, total_paid_halalas")
+    .eq("request_id", requestId!)
+    .single();
+  const ref = `mock_pay_seed_${requestId}`;
+  await supabase.rpc("register_payment_attempt", {
+    p_order_id: order!.id,
+    p_gateway: "mock",
+    p_provider_ref: ref,
+    p_amount_halalas: order!.total_paid_halalas,
+  });
+  await supabase.rpc("record_payment_result", {
+    p_gateway: "mock",
+    p_event_id: `evt_seed_${requestId}`,
+    p_provider_ref: ref,
+    p_status: "paid",
+    p_amount_halalas: order!.total_paid_halalas,
+    p_currency: "SAR",
+    p_gateway_payment_id: ref,
+    p_raw: { seed: true },
+  });
+
+  await requester.rpc("confirm_delegation", { p_request_id: requestId! });
+  const step = await provider.rpc("start_execution", { p_request_id: requestId! });
+  if (step.error) throw step.error;
+  const path = `${requestId}/delivery_proof/seed.pdf`;
+  await provider.storage.from("request-documents").upload(path, samplePdf("SEED delivery proof"), {
+    contentType: "application/pdf",
+  });
+  await provider.from("request_documents").insert({
+    request_id: requestId!,
+    kind: "delivery_proof",
+    label: "إثبات الإنجاز",
+    storage_path: path,
+    file_name: "proof.pdf",
+    mime_type: "application/pdf",
+    size_bytes: 400,
+    uploaded_by: providerRow!.profile_id,
+  });
+  const delivered = await provider.rpc("submit_delivery", {
+    p_request_id: requestId!,
+    p_note: "أُنجزت الخدمة وأُرفق الإثبات",
+  });
+  if (delivered.error) throw delivered.error;
+  const completed = await requester.rpc("confirm_completion", { p_request_id: requestId! });
+  if (completed.error) throw completed.error;
+
+  const [speed, accuracy, communication] = opts.scores;
+  await requester.rpc("submit_review", {
+    p_request_id: requestId!,
+    p_speed: speed,
+    p_accuracy: accuracy,
+    p_communication: communication,
+    p_comment: opts.comment,
+  });
+  await provider.rpc("submit_review", {
+    p_request_id: requestId!,
+    p_request_clarity: 5,
+    p_documents_speed: 4,
+  });
+}
+
+async function seedCompletedOrders() {
+  const { count } = await supabase.from("reviews").select("id", { count: "exact", head: true });
+  if (count) {
+    console.log("• طلبات مكتملة وتقييمات: موجودة مسبقاً");
+    return;
+  }
+  await seedCompletedOrder({
+    providerEmail: "provider1@mueqeb.test",
+    requester: { email: "establishment@mueqeb.test" },
+    serviceSlug: "gosi_register_establishment",
+    scores: [5, 5, 4],
+    comment: "إنجاز سريع ومتابعة ممتازة.",
+  });
+  await seedCompletedOrder({
+    providerEmail: "provider1@mueqeb.test",
+    requester: { phone: "+966500000003" },
+    serviceSlug: "cr_modify_activity",
+    scores: [4, 5, 5],
+    comment: "دقيقون في التفاصيل.",
+  });
+  await seedCompletedOrder({
+    providerEmail: "provider3@mueqeb.test",
+    requester: { email: "establishment@mueqeb.test" },
+    serviceSlug: "mudad_wage_protection_setup",
+    scores: [3, 4, 3],
+    comment: "تأخر الرد قليلاً لكن أُنجزت الخدمة.",
+  });
+  console.log("✓ طلبات مكتملة: 3 (مع تقييمات متبادلة منشورة)");
+}
+
 async function main() {
   for (const user of USERS) {
     await seedUser(user);
   }
   await seedSampleRequest();
+  await seedCompletedOrders();
   console.log(`\nكلمة المرور لكل الحسابات: ${SEED_PASSWORD}`);
 }
 

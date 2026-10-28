@@ -938,6 +938,84 @@ export type Database = {
           },
         ];
       };
+      reviews: {
+        Row: {
+          accuracy: number | null;
+          comment: string | null;
+          communication: number | null;
+          created_at: string;
+          documents_speed: number | null;
+          id: string;
+          provider_id: string;
+          request_clarity: number | null;
+          request_id: string;
+          requester_account_id: string;
+          reviewer_id: string;
+          reviewer_role: string;
+          speed: number | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          accuracy?: number | null;
+          comment?: string | null;
+          communication?: number | null;
+          created_at?: string;
+          documents_speed?: number | null;
+          id?: string;
+          provider_id: string;
+          request_clarity?: number | null;
+          request_id: string;
+          requester_account_id: string;
+          reviewer_id: string;
+          reviewer_role: string;
+          speed?: number | null;
+        };
+        Update: {
+          accuracy?: number | null;
+          comment?: string | null;
+          communication?: number | null;
+          created_at?: string;
+          documents_speed?: number | null;
+          id?: string;
+          provider_id?: string;
+          request_clarity?: number | null;
+          request_id?: string;
+          requester_account_id?: string;
+          reviewer_id?: string;
+          reviewer_role?: string;
+          speed?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reviews_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reviews_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "service_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reviews_requester_account_id_fkey";
+            columns: ["requester_account_id"];
+            isOneToOne: false;
+            referencedRelation: "requester_accounts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reviews_reviewer_id_fkey";
+            columns: ["reviewer_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       service_categories: {
         Row: {
           active: boolean;
@@ -1241,12 +1319,32 @@ export type Database = {
       pct_to_bps: { Args: { p_pct: Json }; Returns: number };
       provider_can_view_request: { Args: { p_request_id: string }; Returns: boolean };
       provider_is_editable: { Args: { p_provider_id: string }; Returns: boolean };
-      provider_performance: {
-        Args: { p_provider_id: string };
+      provider_reviews: {
+        Args: { p_limit?: number; p_provider_id: string };
         Returns: {
+          accuracy: number;
+          comment: string;
+          communication: number;
+          created_at: string;
+          id: string;
+          service_name: string;
+          speed: number;
+        }[];
+      };
+      provider_stats: {
+        Args: { p_provider_ids: string[] };
+        Returns: {
+          avg_accuracy: number;
+          avg_communication: number;
+          avg_rating: number;
+          avg_response_minutes: number;
+          avg_speed: number;
           completed_orders: number;
+          dispute_pct: number;
           late_orders: number;
           on_time_pct: number;
+          provider_id: string;
+          reviews_count: number;
         }[];
       };
       public_provider: {
@@ -1319,6 +1417,7 @@ export type Database = {
         Args: { p_request_id: string };
         Returns: {
           completed_orders: number;
+          dispute_pct: number;
           duration_days: number;
           expected_gov_fees_halalas: number;
           fee_halalas: number;
@@ -1326,11 +1425,21 @@ export type Database = {
           includes: string;
           needs_from_client: string;
           office_name: string;
+          on_time_pct: number;
           provider_id: string;
           rating: number;
           response_minutes: number;
+          reviews_count: number;
           status: Database["public"]["Enums"]["bid_status"];
           submitted_at: string;
+        }[];
+      };
+      requester_stats_for_request: {
+        Args: { p_request_id: string };
+        Returns: {
+          avg_rating: number;
+          completed_requests: number;
+          reviews_count: number;
         }[];
       };
       resolve_dispute: {
@@ -1348,6 +1457,7 @@ export type Database = {
         Args: { p_action: string; p_provider_id: string; p_reason?: string };
         Returns: undefined;
       };
+      reviews_revealed: { Args: { p_request_id: string }; Returns: boolean };
       round_bps: { Args: { p_amount: number; p_bps: number }; Returns: number };
       run_order_maintenance: { Args: Record<PropertyKey, never>; Returns: Json };
       send_message: {
@@ -1377,6 +1487,18 @@ export type Database = {
       };
       submit_delivery: { Args: { p_note: string; p_request_id: string }; Returns: undefined };
       submit_provider_for_review: { Args: Record<PropertyKey, never>; Returns: undefined };
+      submit_review: {
+        Args: {
+          p_accuracy?: number;
+          p_comment?: string;
+          p_communication?: number;
+          p_documents_speed?: number;
+          p_request_clarity?: number;
+          p_request_id: string;
+          p_speed?: number;
+        };
+        Returns: undefined;
+      };
       transition_request: {
         Args: {
           p_note?: string;

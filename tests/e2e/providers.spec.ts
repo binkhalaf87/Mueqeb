@@ -104,7 +104,7 @@ test("مزوّد غير معتمد مخفي، ويظهر بعد الاعتماد
   await expect(visitor.getByTestId("provider-services")).toContainText("إصدار أو تجديد رخصة عمل");
   await expect(visitor.getByTestId("provider-services")).toContainText("175.50 ر.س");
   await expect(visitor.getByTestId("provider-services")).toContainText("3 يوم");
-  await expect(visitor.getByTestId("provider-stats")).toContainText("قريباً");
+  await expect(visitor.getByTestId("provider-stats")).toContainText("لا تقييمات بعد");
 
   // الإيقاف يخفيه مجدداً
   await adminPage.getByLabel("سبب الإيقاف").fill("مراجعة شكوى");

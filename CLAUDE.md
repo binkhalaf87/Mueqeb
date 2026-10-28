@@ -83,6 +83,7 @@ completed | disputed → resolved
 - المحادثة تعتمد على Supabase Realtime: لا تستثنِ `realtime` عند `supabase start`.
 - آلة الحالات: `transition_request` (يحدد المنفّذ من الجلسة) و`transition_request_as` (داخلية بمنفّذ صريح).
   أي إغلاق لطلب مدفوع يتطلب تسوية الضمان أولاً (`settle_order_ledger`).
+- ترتيب المزوّدين في التصفح: المعادلة والأوزان في `src/lib/providers/ranking.ts`.
 - بعد أي migration: `npm run db:reset && npm run seed && npm run db:types`.
 - الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`
   ثم `npm run test:e2e` (يحتاج Supabase محلياً + seed).

@@ -16,6 +16,8 @@ import { ActionButton } from "@/components/action-button";
 import { RequestStatusBadge } from "@/components/request-status-badge";
 import { Badge, Card, PageTitle } from "@/components/ui";
 import { RequesterExecutionPanel } from "./execution-panel";
+import { Rating } from "@/components/rating";
+import { ReviewsSection } from "@/components/reviews-section";
 import { RequesterChats } from "./requester-chats";
 
 export const metadata: Metadata = { title: "تفاصيل الطلب" };
@@ -143,6 +145,7 @@ export default async function RequesterRequestPage({
       )}
 
       <RequesterExecutionPanel requestId={request.id} />
+      <ReviewsSection requestId={request.id} role="requester" />
 
       {request.mode !== "direct_listed" && request.status === "open" && (
         <Card className="p-0">
@@ -158,14 +161,16 @@ export default async function RequesterRequestPage({
             <p className="p-6 text-sm text-muted">لم تصل عروض بعد.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm" data-testid="bids-table">
+              <table className="w-full min-w-[880px] text-sm" data-testid="bids-table">
                 <thead className="bg-background text-muted">
                   <tr className="text-start">
                     <th className="px-4 py-2 text-start font-medium">المكتب</th>
                     <th className="px-4 py-2 text-start font-medium">الأتعاب</th>
                     <th className="px-4 py-2 text-start font-medium">المدة</th>
                     <th className="px-4 py-2 text-start font-medium">التقييم</th>
-                    <th className="px-4 py-2 text-start font-medium">الإنجازات</th>
+                    <th className="px-4 py-2 text-start font-medium">المنجزات</th>
+                    <th className="px-4 py-2 text-start font-medium">في الموعد</th>
+                    <th className="px-4 py-2 text-start font-medium">النزاعات</th>
                     <th className="px-4 py-2 text-start font-medium">وقت الرد</th>
                     <th className="px-4 py-2" />
                   </tr>
@@ -207,8 +212,16 @@ export default async function RequesterRequestPage({
                           </Badge>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-muted">{b.rating ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap" data-testid="bid-rating">
+                        <Rating value={b.rating} count={b.reviews_count} />
+                      </td>
                       <td className="px-4 py-3">{b.completed_orders}</td>
+                      <td className="px-4 py-3">
+                        {b.on_time_pct == null ? "—" : `${b.on_time_pct}%`}
+                      </td>
+                      <td className="px-4 py-3">
+                        {b.dispute_pct == null ? "—" : `${b.dispute_pct}%`}
+                      </td>
                       <td className="px-4 py-3">{formatDuration(b.response_minutes)}</td>
                       <td className="px-4 py-3">
                         {open && b.status === "submitted" ? (
@@ -231,7 +244,8 @@ export default async function RequesterRequestPage({
             </div>
           )}
           <p className="border-t border-border px-6 py-3 text-xs text-muted">
-            العروض مغلقة: لا يرى أي مكتب عروض غيره. التقييمات تُفعّل لاحقاً.
+            العروض مغلقة: لا يرى أي مكتب عروض غيره. التقييمات من طلبات مكتملة ومدفوعة عبر المنصة
+            فقط.
           </p>
         </Card>
       )}

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { formatHalalas } from "@/lib/money";
+import { formatDateTime, formatDuration } from "@/lib/format";
+import { getProviderStats } from "@/lib/providers/stats";
+import { Rating } from "@/components/rating";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { Card } from "@/components/ui";
 
@@ -31,11 +34,13 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
   if (!provider) notFound();
 
   const supabase = await createClient();
-  const [{ data: services }, user, { data: performance }] = await Promise.all([
+  const [{ data: services }, user, statsById, { data: reviews }] = await Promise.all([
     supabase.rpc("public_provider_services", { p_provider_id: provider.id }),
     getCurrentUser(),
-    supabase.rpc("provider_performance", { p_provider_id: provider.id }).single(),
+    getProviderStats([provider.id]),
+    supabase.rpc("provider_reviews", { p_provider_id: provider.id }),
   ]);
+  const stats = statsById.get(provider.id);
   // أزرار الطلب لطالب الخدمة؛ والزائر يُدعى للدخول
   const canRequest = !user || user.role === "requester";
   const requestHref = (mode: string, serviceTypeId: string) => {
@@ -54,15 +59,49 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
         {provider.bio && <p className="max-w-3xl whitespace-pre-line">{provider.bio}</p>}
       </section>
 
-      <div className="grid gap-4 sm:grid-cols-3" data-testid="provider-stats">
-        <Stat label="الطلبات المنجزة" value={String(performance?.completed_orders ?? 0)} />
-        <StatPlaceholder label="التقييم" />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5" data-testid="provider-stats">
+        <Card className="col-span-2 p-4 sm:col-span-1">
+          <p className="text-sm text-muted">التقييم</p>
+          <Rating value={stats?.avg_rating} count={stats?.reviews_count} testId="provider-rating" />
+        </Card>
+        <Stat label="الطلبات المنجزة" value={String(stats?.completed_orders ?? 0)} />
         <Stat
           label="الالتزام بالموعد"
-          value={performance?.on_time_pct == null ? "—" : `${performance.on_time_pct}%`}
-          hint={performance?.late_orders ? `${performance.late_orders} طلب متأخر` : undefined}
+          value={stats?.on_time_pct == null ? "—" : `${stats.on_time_pct}%`}
+          hint={stats?.late_orders ? `${stats.late_orders} طلب متأخر` : undefined}
+        />
+        <Stat
+          label="متوسط وقت الرد"
+          value={
+            stats?.avg_response_minutes == null ? "—" : formatDuration(stats.avg_response_minutes)
+          }
+          hint="على الطلبات العامة"
+        />
+        <Stat
+          label="نسبة النزاعات"
+          value={stats?.dispute_pct == null ? "—" : `${stats.dispute_pct}%`}
         />
       </div>
+
+      {stats?.avg_rating != null && (
+        <Card className="space-y-2" data-testid="rating-breakdown">
+          <h2 className="font-semibold">تفاصيل التقييم</h2>
+          <dl className="grid gap-2 text-sm sm:grid-cols-3">
+            {[
+              ["السرعة", stats.avg_speed],
+              ["الدقة", stats.avg_accuracy],
+              ["التواصل", stats.avg_communication],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex items-center gap-2">
+                <dt className="text-muted">{label}</dt>
+                <dd>
+                  <Rating value={value as number} />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      )}
 
       <Card>
         <h2 className="mb-4 font-semibold">الخدمات والأسعار</h2>
@@ -107,6 +146,34 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
           الأسعار أتعاب المكتب فقط. الرسوم الحكومية تُدفع مباشرة عبر القنوات الرسمية.
         </p>
       </Card>
+
+      <Card className="space-y-3">
+        <h2 className="font-semibold">آراء العملاء</h2>
+        {!reviews?.length ? (
+          <p className="text-sm text-muted">لا توجد تقييمات منشورة بعد.</p>
+        ) : (
+          <ul className="divide-y divide-border" data-testid="provider-reviews">
+            {reviews.map((r) => (
+              <li key={r.id} className="space-y-1 py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Rating value={(r.speed + r.accuracy + r.communication) / 3} />
+                  <span className="text-muted">
+                    {r.service_name} · {formatDateTime(r.created_at)}
+                  </span>
+                </div>
+                <p className="text-muted">
+                  السرعة {r.speed} · الدقة {r.accuracy} · التواصل {r.communication}
+                </p>
+                {r.comment && <p>{r.comment}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-muted">
+          تقييمات من عملاء أكملوا طلبات مدفوعة عبر المنصة فقط. تظهر بعد أن يقيّم الطرفان أو تمر 7
+          أيام.
+        </p>
+      </Card>
     </div>
   );
 }
@@ -117,16 +184,6 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
       <p className="text-sm text-muted">{label}</p>
       <p className="text-xl font-bold">{value}</p>
       {hint && <p className="text-xs text-muted">{hint}</p>}
-    </Card>
-  );
-}
-
-function StatPlaceholder({ label }: { label: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-sm text-muted">{label}</p>
-      <p className="text-xl font-bold text-muted">—</p>
-      <p className="text-xs text-muted">قريباً</p>
     </Card>
   );
 }

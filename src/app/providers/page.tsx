@@ -5,6 +5,9 @@ import { getServiceCatalog } from "@/lib/providers/queries";
 import { SAUDI_CITIES, isSaudiCity } from "@/lib/cities";
 import { formatHalalas } from "@/lib/money";
 import { VerifiedBadge } from "@/components/verified-badge";
+import { Rating } from "@/components/rating";
+import { getProviderStats } from "@/lib/providers/stats";
+import { rankProviders } from "@/lib/providers/ranking";
 import { Card, PageTitle, Select } from "@/components/ui";
 
 export const metadata: Metadata = { title: "تصفح المزوّدين" };
@@ -21,6 +24,21 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
     getServiceCatalog(),
     supabase.rpc("public_providers", { p_service_type_id: serviceId, p_city: cityFilter }),
   ]);
+  // الترتيب حسب المعادلة الموثقة في src/lib/providers/ranking.ts
+  const statsById = await getProviderStats((providers ?? []).map((p) => p.id));
+  const ranked = rankProviders(
+    (providers ?? []).map((p) => {
+      const st = statsById.get(p.id);
+      return {
+        ...p,
+        name: p.office_name,
+        avgRating: st?.avg_rating == null ? null : Number(st.avg_rating),
+        reviewsCount: st?.reviews_count ?? 0,
+        completedOrders: st?.completed_orders ?? 0,
+        onTimePct: st?.on_time_pct ?? null,
+      };
+    }),
+  );
   const selectedService = catalog.flatMap((c) => c.service_types).find((t) => t.id === serviceId);
 
   return (
@@ -67,7 +85,7 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
         )}
       </Card>
 
-      {!providers?.length ? (
+      {!ranked.length ? (
         <Card>
           <p className="text-muted" data-testid="no-providers">
             لا يوجد مزوّدون مطابقون حالياً.
@@ -75,7 +93,7 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
         </Card>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2" data-testid="providers-list">
-          {providers.map((p) => (
+          {ranked.map((p) => (
             <li key={p.id}>
               <Link href={`/providers/${p.id}`} className="block h-full">
                 <Card className="h-full space-y-2 transition hover:border-primary">
@@ -84,6 +102,13 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
                     <VerifiedBadge />
                   </div>
                   <p className="text-sm text-muted">{p.cities.join("، ")}</p>
+                  <p className="flex flex-wrap items-center gap-x-3 text-sm">
+                    <Rating value={p.avgRating} count={p.reviewsCount} />
+                    <span className="text-muted">
+                      {p.completedOrders} طلب منجز
+                      {p.onTimePct !== null && ` · ${p.onTimePct}% في الموعد`}
+                    </span>
+                  </p>
                   {p.bio && <p className="line-clamp-2 text-sm">{p.bio}</p>}
                   <p className="text-sm">
                     {selectedService ? "أتعاب الخدمة تبدأ من " : "الأسعار تبدأ من "}

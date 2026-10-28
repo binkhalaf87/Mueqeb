@@ -13,6 +13,7 @@ import { RequestStatusBadge } from "@/components/request-status-badge";
 import { Badge, Card, PageTitle } from "@/components/ui";
 import { BidForm } from "./bid-form";
 import { ProviderExecutionPanel } from "./execution-panel";
+import { ReviewsSection } from "@/components/reviews-section";
 import { Chat } from "@/components/chat";
 import { getThreadMessages } from "@/lib/execution/queries";
 
@@ -40,18 +41,21 @@ export default async function ProviderRequestPage({
   if (!request) notFound();
 
   // عرضي فقط (RLS)، والبيانات الخاصة تظهر فقط إذا رُسي الطلب عليّ (RLS)
-  const [{ data: myBid }, { data: details }, { data: order }] = await Promise.all([
-    supabase.from("bids").select("*").eq("request_id", id).maybeSingle(),
-    supabase.from("request_private_details").select("*").eq("request_id", id).maybeSingle(),
-    // الطلب المالي يظهر للمزوّد المُرسى عليه فقط (RLS)
-    supabase
-      .from("orders")
-      .select(
-        "fee_halalas, provider_commission_bps, provider_commission_halalas, provider_net_halalas, payment_status",
-      )
-      .eq("request_id", id)
-      .maybeSingle(),
-  ]);
+  const [{ data: myBid }, { data: details }, { data: order }, { data: clientStats }] =
+    await Promise.all([
+      supabase.from("bids").select("*").eq("request_id", id).maybeSingle(),
+      supabase.from("request_private_details").select("*").eq("request_id", id).maybeSingle(),
+      // الطلب المالي يظهر للمزوّد المُرسى عليه فقط (RLS)
+      supabase
+        .from("orders")
+        .select(
+          "fee_halalas, provider_commission_bps, provider_commission_halalas, provider_net_halalas, payment_status",
+        )
+        .eq("request_id", id)
+        .maybeSingle(),
+      // سجل العميل بلا هوية: متوسط تقييمه وعدد طلباته المكتملة
+      supabase.rpc("requester_stats_for_request", { p_request_id: id }).single(),
+    ]);
 
   const left = timeLeft(request.bids_deadline);
   const canBid =
@@ -96,6 +100,18 @@ export default async function ProviderRequestPage({
             {formatHalalas(request.service_types.guide_max_halalas)}
           </p>
         )}
+        <p data-testid="client-stats">
+          <span className="text-muted">سجل العميل: </span>
+          {clientStats?.avg_rating == null ? (
+            "لا تقييمات بعد"
+          ) : (
+            <>
+              تقييمه <strong>{Number(clientStats.avg_rating).toFixed(1)}</strong>/5 (
+              {clientStats.reviews_count})
+            </>
+          )}{" "}
+          · طلبات مكتملة: <strong>{clientStats?.completed_requests ?? 0}</strong>
+        </p>
         <p className="text-xs text-muted">اسم العميل وبيانات تواصله تظهر لك فقط إذا اختار عرضك.</p>
       </Card>
 
@@ -150,6 +166,7 @@ export default async function ProviderRequestPage({
       )}
 
       {awardedToMe && <ProviderExecutionPanel requestId={request.id} />}
+      {awardedToMe && <ReviewsSection requestId={request.id} role="provider" />}
 
       {myBid && (
         <Card className="space-y-2 text-sm" data-testid="my-bid">

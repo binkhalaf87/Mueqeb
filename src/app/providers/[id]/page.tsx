@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
 import { formatHalalas } from "@/lib/money";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { Card } from "@/components/ui";
@@ -29,9 +31,16 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
   if (!provider) notFound();
 
   const supabase = await createClient();
-  const { data: services } = await supabase.rpc("public_provider_services", {
-    p_provider_id: provider.id,
-  });
+  const [{ data: services }, user] = await Promise.all([
+    supabase.rpc("public_provider_services", { p_provider_id: provider.id }),
+    getCurrentUser(),
+  ]);
+  // أزرار الطلب لطالب الخدمة؛ والزائر يُدعى للدخول
+  const canRequest = !user || user.role === "requester";
+  const requestHref = (mode: string, serviceTypeId: string) => {
+    const target = `/dashboard/requester/requests/new?mode=${mode}&provider=${provider.id}&service=${serviceTypeId}`;
+    return user ? target : `/login?next=${encodeURIComponent(target)}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -69,6 +78,22 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
                   </p>
                   <p className="text-muted">خلال {s.duration_days} يوم تقريباً</p>
                 </div>
+                {canRequest && (
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-col">
+                    <Link
+                      href={requestHref("direct_listed", s.service_type_id)}
+                      className="rounded-lg bg-primary px-3 py-1.5 text-center text-sm font-medium text-white hover:bg-primary-hover"
+                    >
+                      اطلب بالسعر المعلن
+                    </Link>
+                    <Link
+                      href={requestHref("direct_quote", s.service_type_id)}
+                      className="rounded-lg border border-border px-3 py-1.5 text-center text-sm hover:border-primary"
+                    >
+                      اطلب عرضاً خاصاً
+                    </Link>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

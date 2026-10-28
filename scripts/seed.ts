@@ -107,6 +107,44 @@ const USERS: SeedUser[] = [
     },
   },
   {
+    label: "مزوّد 3",
+    email: "provider3@mueqeb.test",
+    fullName: "فيصل القحطاني",
+    city: "الرياض",
+    role: "provider",
+    provider: {
+      officeName: "مكتب الريادة للخدمات العامة",
+      crNumber: "1010554433",
+      municipalLicenseNumber: "40099881",
+      cities: ["الرياض"],
+      bio: "خبرة 10 سنوات في خدمات قوى ومدد للمنشآت.",
+      status: "approved",
+      services: [
+        { slug: "qiwa_work_permit", feeHalalas: 15000, durationDays: 2 },
+        { slug: "mudad_wage_protection_setup", feeHalalas: 25000, durationDays: 3 },
+      ],
+    },
+  },
+  {
+    label: "مزوّد 4",
+    email: "provider4@mueqeb.test",
+    fullName: "ماجد الشمري",
+    city: "الرياض",
+    role: "provider",
+    provider: {
+      officeName: "مكتب المسار للتعقيب",
+      crNumber: "1010443322",
+      municipalLicenseNumber: "40077665",
+      cities: ["الرياض", "حائل"],
+      bio: "نخدم منشآت الرياض وحائل في قوى والسجل التجاري.",
+      status: "approved",
+      services: [
+        { slug: "qiwa_work_permit", feeHalalas: 20000, durationDays: 4 },
+        { slug: "cr_modify_activity", feeHalalas: 28000, durationDays: 3 },
+      ],
+    },
+  },
+  {
     label: "فرد",
     phone: "+966500000003",
     fullName: "سارة العتيبي",
@@ -271,10 +309,63 @@ async function seedProvider(profileId: string, p: SeedProvider) {
   if (statusError) throw statusError;
 }
 
+/** طلب عام تجريبي من حساب المنشأة مع عرض من المزوّد 1 (عبر دوال المنصة نفسها) */
+async function seedSampleRequest() {
+  const { count } = await supabase
+    .from("service_requests")
+    .select("id", { count: "exact", head: true });
+  if (count) {
+    console.log("• طلب تجريبي: موجود مسبقاً");
+    return;
+  }
+
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+  const as = async (email: string) => {
+    const client = createClient<Database>(url!, publishableKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { error } = await client.auth.signInWithPassword({ email, password: SEED_PASSWORD });
+    if (error) throw error;
+    return client;
+  };
+
+  const requester = await as("establishment@mueqeb.test");
+  const { data: account } = await requester.from("requester_accounts").select("id").single();
+  const { data: type } = await requester
+    .from("service_types")
+    .select("id, required_docs")
+    .eq("slug", "qiwa_work_permit")
+    .single();
+  const { data: requestId, error } = await requester.rpc("create_service_request", {
+    p_requester_account_id: account!.id,
+    p_service_type_id: type!.id,
+    p_mode: "public",
+    p_city: "الرياض",
+    p_urgency: "urgent",
+    p_description: "إصدار رخص عمل لثلاثة عمال جدد في مؤسسة مقاولات.",
+    p_available_docs: type!.required_docs.slice(0, 1),
+    p_private_notes: "التواصل مع مدير الموارد البشرية بعد الترسية.",
+  });
+  if (error) throw error;
+
+  const provider = await as("provider1@mueqeb.test");
+  const { error: bidError } = await provider.rpc("submit_bid", {
+    p_request_id: requestId,
+    p_fee_halalas: 45000,
+    p_expected_gov_fees_halalas: 0,
+    p_duration_days: 3,
+    p_includes: "إصدار الرخص الثلاث ومتابعتها حتى التفعيل.",
+    p_needs_from_client: "تفويض المكتب في قوى وصور إقامات العمال.",
+  });
+  if (bidError) throw bidError;
+  console.log("✓ طلب تجريبي: طلب عام مفتوح (رخص عمل، الرياض) مع عرض من المزوّد 1");
+}
+
 async function main() {
   for (const user of USERS) {
     await seedUser(user);
   }
+  await seedSampleRequest();
   console.log(`\nكلمة المرور لكل الحسابات: ${SEED_PASSWORD}`);
 }
 

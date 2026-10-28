@@ -46,10 +46,15 @@ export function navForRole(role: Role | null | undefined): NavItem[] {
   const browse = { href: "/providers", label: "تصفح المزوّدين" };
   switch (role) {
     case "requester":
-      return [{ href: ROLE_HOME.requester, label: "طلباتي" }, browse];
+      return [
+        { href: ROLE_HOME.requester, label: "طلباتي" },
+        { href: "/dashboard/requester/requests/new", label: "طلب جديد" },
+        browse,
+      ];
     case "provider":
       return [
         { href: ROLE_HOME.provider, label: "لوحة المزوّد" },
+        { href: "/dashboard/provider/requests", label: "الطلبات المتاحة" },
         { href: "/dashboard/provider/profile", label: "ملف المكتب" },
         { href: "/dashboard/provider/services", label: "خدماتي وأسعاري" },
       ];

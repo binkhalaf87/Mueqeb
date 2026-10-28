@@ -120,12 +120,13 @@ const BADGE_TONES = {
 
 export function Badge({
   tone = "neutral",
+  className = "",
   children,
   ...props
 }: ComponentProps<"span"> & { tone?: keyof typeof BADGE_TONES }) {
   return (
     <span
-      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE_TONES[tone]}`}
+      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE_TONES[tone]} ${className}`}
       {...props}
     >
       {children}

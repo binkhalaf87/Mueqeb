@@ -71,3 +71,12 @@ completed | disputed → resolved
 - عند الغموض في قاعدة عمل، اختر الأبسط واذكر ذلك في التقرير بدل التوقف.
 - في نهاية كل مرحلة: شغّل الاختبارات والـ lint والـ build، واعرض تقريراً قصيراً مع خطوات
   التجربة اليدوية.
+
+## ملاحظات تقنية للتطوير
+- Next.js 16: الـ middleware اسمه `proxy` (`src/proxy.ts`). راجع `AGENTS.md` والتوثيق في
+  `node_modules/next/dist/docs/` قبل استخدام أي API.
+- التحقق من الدور يتم في الخادم داخل كل صفحة عبر `requireRole()` من `src/lib/auth/session.ts`؛
+  الـ proxy فحص تفاؤلي فقط.
+- بعد أي migration: `npm run db:reset && npm run seed && npm run db:types`.
+- الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`
+  ثم `npm run test:e2e` (يحتاج Supabase محلياً + seed).

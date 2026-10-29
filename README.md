@@ -16,24 +16,39 @@ npm run seed                       # مستخدمون وبيانات تجريب�
 npm run dev                        # http://localhost:3000
 ```
 
-## النشر على Railway
+## النشر: Railway (الخادم) + Vercel (الواجهة) + GitHub (المستودع)
 
-المشروع جاهز للنشر على Railway (`railway.json`): يُبنى بـ `npm run build`، وتُطبَّق الـ migrations تلقائياً قبل
-كل نشر (`npm run db:migrate`)، ويُفحص `/api/health`.
+```
+المستخدم ──▶ mueqeb.vercel.app (Vercel: واجهة فقط، vercel.json يمرّر كل طلب)
+                 └──▶ web-production-95b82.up.railway.app (Railway: خدمة web)
+                          ├── Postgres (خدمة Railway)
+                          └── Volume /data (المستندات الخاصة)
+```
 
-1. في مشروع Railway: **New → Database → PostgreSQL**.
-2. **New → GitHub Repo** واختر هذا المستودع (الفرع المطلوب).
-3. في خدمة التطبيق → **Variables**:
-   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
-   - `AUTH_SECRET` = سلسلة عشوائية (`openssl rand -hex 32`)
-   - `STORAGE_DIR` = `/data/storage`
-   - `PAYMENT_PROVIDER` = `mock` و`MOCK_PAYMENT_WEBHOOK_SECRET` = سلسلة عشوائية
-     (ولنسخة عرض على بيئة production: `ALLOW_MOCK_PAYMENTS_IN_PRODUCTION` = `1`)
-4. خدمة التطبيق → **Settings → Volumes**: أضف Volume على المسار `/data` (المستندات الخاصة).
-5. **Settings → Networking → Generate Domain** للحصول على الرابط.
-6. البيانات التجريبية (اختياري، مرة واحدة) من جهازك بعنوان القاعدة العام:
-   `DATABASE_URL=<DATABASE_PUBLIC_URL> SEED_ALLOW_REMOTE=1 SEED_PASSWORD=<كلمة خاصة> npm run seed`
-   (المستندات التجريبية تُكتب على جهازك لا على Volume الخادم، فروابطها لن تفتح؛ ارفع غيرها من الواجهة).
+- **GitHub** `binkhalaf87/Mueqeb`: كل push على الفرع المربوط ينشر الطرفين تلقائياً.
+- **Railway** (مشروع `mueqeb`): خدمة `web` تبني التطبيق (`railway.json`).
+  - تطبّق الـ migrations قبل كل نشر.
+  - تفحص `/api/health`.
+  - تشغّل المهام المجدولة.
+  - تستقبل webhooks الدفع.
+- **Vercel** (مشروع `mueqeb`): لا يبني التطبيق ولا يحمل أي مفتاح أو اتصال بقاعدة البيانات.
+  `vercel.json` يمرّر كل الطلبات إلى خدمة Railway، فتبقى الأسرار كلها في Railway.
+
+متغيرات خدمة `web` في Railway:
+
+| المتغير | الغرض |
+| --- | --- |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (الشبكة الداخلية) |
+| `AUTH_SECRET` | توقيع الجلسات وروابط الملفات |
+| `STORAGE_DIR` | `/data/storage` على الـ Volume |
+| `PORT` | `8080` (منفذ النطاق) |
+| `APP_URL` | `https://mueqeb.vercel.app`: نطاق الواجهة لإعادة التوجيه وروابط العودة من البوابة |
+| `SERVER_ACTIONS_ALLOWED_ORIGINS` | نطاقا Vercel وRailway المسموح لهما بالنماذج |
+| `PAYMENT_PROVIDER` / `MOCK_PAYMENT_WEBHOOK_SECRET` / `ALLOW_MOCK_PAYMENTS_IN_PRODUCTION` | بوابة الاختبار لنسخة العرض |
+| `SEED_ON_START` / `SEED_ALLOW_REMOTE` / `SEED_PASSWORD` | تعبئة البيانات التجريبية عند التشغيل (idempotent) |
+
+عند تغيير نطاق Railway حدّث `destination` في `vercel.json`، وعند تغيير نطاق Vercel حدّث `APP_URL`
+و`SERVER_ACTIONS_ALLOWED_ORIGINS`.
 
 ## الدفع (وضع الاختبار فقط)
 

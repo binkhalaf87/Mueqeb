@@ -13,9 +13,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function GET(request: NextRequest) {
   const requestId = request.nextUrl.searchParams.get("request") ?? "";
   if (!UUID.test(requestId)) {
-    return NextResponse.redirect(new URL("/dashboard/requester", request.url));
+    return redirectTo(request, "/dashboard/requester");
   }
-  const target = new URL(`/dashboard/requester/requests/${requestId}`, request.url);
 
   try {
     // آخر محاولة دفع لم تُحسم بعد لهذا الطلب
@@ -35,6 +34,10 @@ export async function GET(request: NextRequest) {
     console.error("payment return verification failed", err);
   }
 
-  target.searchParams.set("payment", "return");
-  return NextResponse.redirect(target);
+  return redirectTo(request, `/dashboard/requester/requests/${requestId}?payment=return`);
+}
+
+/** على نطاق الواجهة العام (APP_URL) إن حُدد، وإلا نطاق الطلب نفسه */
+function redirectTo(request: NextRequest, path: string) {
+  return NextResponse.redirect(new URL(path, process.env.APP_URL || request.url));
 }

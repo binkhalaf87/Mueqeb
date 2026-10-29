@@ -19,10 +19,13 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
+/**
+ * إعادة التوجيه على نطاق الواجهة العام (APP_URL، أي Vercel أمام خادم Railway) إن حُدد،
+ * فلا يُحوَّل المتصفح إلى نطاق الخادم الداخلي.
+ */
 function redirectTo(request: NextRequest, to: string, next?: string) {
-  const target = request.nextUrl.clone();
-  target.pathname = to;
-  target.search = next ? `?next=${encodeURIComponent(next)}` : "";
+  const target = new URL(to, process.env.APP_URL || request.nextUrl.origin);
+  if (next) target.searchParams.set("next", next);
   return NextResponse.redirect(target);
 }
 

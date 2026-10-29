@@ -250,6 +250,18 @@ describe.skipIf(!available)("admin operations (local Postgres)", () => {
       const expected = a.order.provider_net_halalas + b.order.provider_net_halalas;
       expect(Number(row.outstanding_halalas)).toBe(expected);
 
+      // لوحة المزوّد: مستحقاته من الدفتر، ولا يرى مستحقات غيره
+      const before = (await provider.client.rpc("my_provider_earnings")).data as Record<
+        string,
+        number
+      >;
+      expect(before).toEqual({
+        payable_halalas: expected,
+        paid_out_halalas: 0,
+        in_escrow_halalas: 0,
+      });
+      expect((await anonClient().rpc("my_provider_earnings")).error).not.toBeNull();
+
       const stale = await admin.rpc("record_provider_payout", {
         p_provider_id: provider.providerId,
         p_expected_halalas: expected - 1,
@@ -309,6 +321,16 @@ describe.skipIf(!available)("admin operations (local Postgres)", () => {
         p_admin_id: adminId,
       });
       expect(again.error?.message).toContain("nothing_to_pay");
+
+      const after = (await provider.client.rpc("my_provider_earnings")).data as Record<
+        string,
+        number
+      >;
+      expect(after).toEqual({
+        payable_halalas: 0,
+        paid_out_halalas: expected,
+        in_escrow_halalas: 0,
+      });
 
       // المزوّد يرى صرفه فقط؛ وسجل الصرف لا يُعدّل
       expect((await provider.client.from("provider_payouts").select("id")).data).toHaveLength(1);

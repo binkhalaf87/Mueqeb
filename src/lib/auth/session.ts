@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb, getSessionUserId } from "@/lib/db/server";
 import { homePathForRole, type Role } from "@/lib/auth/routes";
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, signSession } from "@/lib/auth/token";
+import { sessionVersion } from "@/lib/auth/accounts";
 
 export type CurrentUser = {
   id: string;
@@ -67,10 +68,11 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
-/** يبدأ جلسة للمستخدم (بعد التسجيل أو الدخول) */
-export async function startSession(userId: string) {
+/** يبدأ جلسة للمستخدم (بعد التسجيل أو الدخول أو تغيير كلمة المرور) بإصدار جلساته الحالي */
+export async function startSession(userId: string, version?: number) {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, await signSession(userId), {
+  const ver = version ?? (await sessionVersion(userId)) ?? 0;
+  cookieStore.set(SESSION_COOKIE, await signSession(userId, ver), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

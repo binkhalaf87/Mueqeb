@@ -267,6 +267,7 @@ export type Database = {
           cr_number: string | null;
           created_by: string;
           created_at: string;
+          about: string | null;
         };
       };
       reviews: {
@@ -455,6 +456,8 @@ export type Database = {
       };
       mask_contact_info: { Args: { p_text: string }; Returns: string };
       mentions_credentials: { Args: { p_text: string }; Returns: boolean };
+      my_login: { Args: Record<string, never>; Returns: { email: string; phone: string }[] };
+      my_provider_earnings: { Args: Record<string, never>; Returns: Json };
       open_dispute: { Args: { p_request_id: string; p_reason: string }; Returns: undefined };
       order_ledger_balances: {
         Args: { p_order_id: string };

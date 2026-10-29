@@ -54,3 +54,64 @@ export async function verifyCredentials(
   );
   return row?.id ?? null;
 }
+
+/** يتحقق من كلمة المرور الحالية لمستخدم معروف (قبل تغيير بيانات الدخول) */
+export async function verifyPasswordById(
+  userId: string,
+  password: string,
+  db: Db = dbFor(SERVICE),
+): Promise<boolean> {
+  const row = await db.maybeOne<{ ok: boolean }>(
+    "select encrypted_password = public.crypt($2, encrypted_password) as ok from auth.users where id = $1",
+    [userId, password],
+  );
+  return Boolean(row?.ok);
+}
+
+/**
+ * يغيّر كلمة المرور ويزيد إصدار الجلسات فتبطل كل الجلسات السابقة.
+ * يعيد الإصدار الجديد ليُصدر المستدعي جلسة جديدة لهذا الجهاز.
+ */
+export async function changePassword(
+  userId: string,
+  newPassword: string,
+  db: Db = dbFor(SERVICE),
+): Promise<number> {
+  const row = await db.one<{ session_version: number }>(
+    `update auth.users
+     set encrypted_password = public.crypt($2, public.gen_salt('bf', 10)),
+         session_version = session_version + 1,
+         updated_at = now()
+     where id = $1
+     returning session_version`,
+    [userId, newPassword],
+  );
+  return row.session_version;
+}
+
+/** إصدار الجلسات الحالي للمستخدم (null إن حُذف الحساب) */
+export async function sessionVersion(userId: string, db: Db = dbFor(SERVICE)) {
+  const row = await db.maybeOne<{ session_version: number }>(
+    "select session_version from auth.users where id = $1",
+    [userId],
+  );
+  return row?.session_version ?? null;
+}
+
+/** يغيّر بريد الدخول (أو يضيفه لحساب مسجّل بالجوال)؛ exists إن كان مستخدماً لحساب آخر */
+export async function changeEmail(
+  userId: string,
+  email: string,
+  db: Db = dbFor(SERVICE),
+): Promise<{ ok: true } | { ok: false; reason: "exists" }> {
+  try {
+    await db.query("update auth.users set email = $2, updated_at = now() where id = $1", [
+      userId,
+      email.toLowerCase(),
+    ]);
+    return { ok: true };
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") return { ok: false, reason: "exists" };
+    throw error;
+  }
+}

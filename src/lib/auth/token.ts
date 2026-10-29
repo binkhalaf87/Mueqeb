@@ -69,20 +69,28 @@ async function verify<T extends Signed>(token: string | undefined, typ: string, 
 
 const seconds = (ms: number) => Math.floor(ms / 1000);
 
-type SessionPayload = Signed & { sub: string };
+/** ver: إصدار جلسات المستخدم وقت الإنشاء؛ تغيير كلمة المرور يزيده فتبطل الجلسات السابقة */
+type SessionPayload = Signed & { sub: string; ver?: number };
 
-export function signSession(userId: string, now = Date.now()) {
+export function signSession(userId: string, version = 0, now = Date.now()) {
   return sign<SessionPayload>({
     typ: "session",
     sub: userId,
+    ver: version,
     exp: seconds(now) + SESSION_MAX_AGE_SECONDS,
   });
 }
 
+/** المستخدم وإصدار جلسته إن كان الرمز صحيح التوقيع وغير منتهٍ، وإلا null */
+export async function readSession(token: string | undefined, now = Date.now()) {
+  const payload = await verify<SessionPayload>(token, "session", now);
+  if (typeof payload?.sub !== "string") return null;
+  return { userId: payload.sub, version: typeof payload.ver === "number" ? payload.ver : 0 };
+}
+
 /** معرّف المستخدم إن كان الرمز صحيح التوقيع وغير منتهٍ، وإلا null */
 export async function verifySession(token: string | undefined, now = Date.now()) {
-  const payload = await verify<SessionPayload>(token, "session", now);
-  return typeof payload?.sub === "string" ? payload.sub : null;
+  return (await readSession(token, now))?.userId ?? null;
 }
 
 type FilePayload = Signed & { bucket: string; path: string };

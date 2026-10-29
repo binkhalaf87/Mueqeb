@@ -7,6 +7,7 @@ import { providerStage } from "@/lib/providers/constants";
 import { getProviderStats } from "@/lib/providers/stats";
 import { ProviderStageBadge } from "@/components/provider-stage-badge";
 import { Card, PageTitle } from "@/components/ui";
+import { ProviderOrdersPanel } from "./orders-panel";
 
 export const metadata: Metadata = { title: "لوحة المزوّد" };
 
@@ -50,7 +51,13 @@ export default async function ProviderDashboard() {
 
   return (
     <div className="space-y-6">
-      <PageTitle subtitle="أكمل ملف مكتبك وخدماتك ليظهر للعملاء بعد اعتماد الإدارة.">
+      <PageTitle
+        subtitle={
+          stage === "approved"
+            ? "طلباتك الجارية ومستحقاتك وأداؤك."
+            : "أكمل ملف مكتبك وخدماتك ليظهر للعملاء بعد اعتماد الإدارة."
+        }
+      >
         {provider?.office_name ?? "لوحة المزوّد"}
       </PageTitle>
 
@@ -83,6 +90,10 @@ export default async function ProviderDashboard() {
         )}
       </Card>
 
+      {provider && stage !== "draft" && stage !== "under_review" && (
+        <ProviderOrdersPanel providerId={provider.id} />
+      )}
+
       {stage === "approved" && performance && (
         <Card data-testid="provider-performance">
           <h2 className="mb-2 font-semibold">أداؤك</h2>
@@ -100,26 +111,28 @@ export default async function ProviderDashboard() {
         </Card>
       )}
 
-      <Card>
-        <h2 className="mb-3 font-semibold">خطوات إكمال الملف</h2>
-        <ol className="space-y-2">
-          {steps.map((step) => (
-            <li key={step.label} className="flex items-center gap-3">
-              <span
-                aria-hidden
-                className={`grid size-6 place-items-center rounded-full text-xs ${
-                  step.done ? "bg-primary text-white" : "border border-border text-muted"
-                }`}
-              >
-                {step.done ? "✓" : ""}
-              </span>
-              <Link href={step.href} className="hover:text-primary">
-                {step.label}
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </Card>
+      {!steps.every((step) => step.done) && (
+        <Card>
+          <h2 className="mb-3 font-semibold">خطوات إكمال الملف</h2>
+          <ol className="space-y-2">
+            {steps.map((step) => (
+              <li key={step.label} className="flex items-center gap-3">
+                <span
+                  aria-hidden
+                  className={`grid size-6 place-items-center rounded-full text-xs ${
+                    step.done ? "bg-primary text-white" : "border border-border text-muted"
+                  }`}
+                >
+                  {step.done ? "✓" : ""}
+                </span>
+                <Link href={step.href} className="hover:text-primary">
+                  {step.label}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      )}
     </div>
   );
 }

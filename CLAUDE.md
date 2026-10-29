@@ -83,6 +83,8 @@ completed | disputed → resolved
   أساس ذلك migration المنصة `20261027000001_platform.sql` (الأدوار، `auth.uid()`، `storage.objects`، `cron.job`).
 - الدخول: `auth.users` بكلمات مرور bcrypt (`src/lib/auth/accounts.ts`)، والجلسة كوكي موقّع بـ `AUTH_SECRET`
   (`src/lib/auth/token.ts`)، مع حد لمحاولات الدخول الفاشلة. لا تُخزَّن أي بيانات دخول لحسابات حكومية.
+  الجلسة تحمل `auth.users.session_version`؛ تغيير كلمة المرور يزيده فتبطل الجلسات الأخرى فوراً.
+- صفحة «حسابي» `/dashboard/account` لكل الأدوار (البيانات الشخصية، المنشأة لمالكها، البريد، كلمة المرور).
 - الملفات: `src/lib/storage` على `STORAGE_DIR` (Volume في Railway)؛ الرفع والقراءة والحذف تمر بسياسات RLS على
   `storage.objects`، والتنزيل فقط عبر رابط موقّع مؤقت `/api/files/<token>`.
 - الدفع: كل كتابة مالية عبر دوال قاعدة البيانات بهوية الخادم (`src/lib/payments/process.ts`)،

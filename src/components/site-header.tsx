@@ -35,14 +35,19 @@ export async function SiteHeader() {
         <div className="ms-auto flex items-center gap-3 text-sm">
           {user ? (
             <>
-              <span className="text-muted" data-testid="current-user">
+              <Link
+                href="/dashboard/account"
+                className="text-muted hover:text-primary"
+                data-testid="current-user"
+                title="حسابي"
+              >
                 {user.fullName || "مستخدم"}
                 {user.role && (
                   <span className="ms-2 rounded-full bg-primary-soft px-2 py-0.5 text-xs text-primary">
                     {ROLE_LABEL[user.role]}
                   </span>
                 )}
-              </span>
+              </Link>
               <form action={signOut}>
                 <button type="submit" className="text-muted hover:text-danger">
                   خروج

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  readSession,
   SESSION_MAX_AGE_SECONDS,
   signFileToken,
   signSession,
@@ -20,7 +21,7 @@ describe("session tokens", () => {
 
   it("expires after the max age", async () => {
     const now = Date.now();
-    const token = await signSession(USER, now);
+    const token = await signSession(USER, 0, now);
     expect(await verifySession(token, now + (SESSION_MAX_AGE_SECONDS - 60) * 1000)).toBe(USER);
     expect(await verifySession(token, now + (SESSION_MAX_AGE_SECONDS + 1) * 1000)).toBeNull();
   });
@@ -50,6 +51,13 @@ describe("session tokens", () => {
     process.env.AUTH_SECRET = "short";
     await expect(signSession(USER)).rejects.toThrow("AUTH_SECRET");
     process.env.AUTH_SECRET = saved;
+  });
+});
+
+describe("session version", () => {
+  it("carries the session version for invalidation after a password change", async () => {
+    expect(await readSession(await signSession(USER, 3))).toEqual({ userId: USER, version: 3 });
+    expect(await readSession(await signSession(USER))).toEqual({ userId: USER, version: 0 });
   });
 });
 

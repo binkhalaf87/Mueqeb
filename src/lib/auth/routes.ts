@@ -44,12 +44,14 @@ export type NavItem = { href: string; label: string };
 
 export function navForRole(role: Role | null | undefined): NavItem[] {
   const browse = { href: "/providers", label: "تصفح المزوّدين" };
+  const account = { href: "/dashboard/account", label: "حسابي" };
   switch (role) {
     case "requester":
       return [
         { href: ROLE_HOME.requester, label: "طلباتي" },
         { href: "/dashboard/requester/requests/new", label: "طلب جديد" },
         browse,
+        account,
       ];
     case "provider":
       return [
@@ -57,9 +59,10 @@ export function navForRole(role: Role | null | undefined): NavItem[] {
         { href: "/dashboard/provider/requests", label: "الطلبات المتاحة" },
         { href: "/dashboard/provider/profile", label: "ملف المكتب" },
         { href: "/dashboard/provider/services", label: "خدماتي وأسعاري" },
+        account,
       ];
     case "admin":
-      return [{ href: ROLE_HOME.admin, label: "لوحة الإدارة" }, browse];
+      return [{ href: ROLE_HOME.admin, label: "لوحة الإدارة" }, browse, account];
     default:
       return [{ href: "/onboarding", label: "إكمال التسجيل" }];
   }

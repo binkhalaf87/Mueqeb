@@ -11,14 +11,12 @@ const CLOSED = ["completed", "resolved", "cancelled", "expired"];
 export async function RequesterChats({
   requestId,
   status,
-  currentUserId,
   awardedProviderId,
   bidders,
   targetProviderId,
 }: {
   requestId: string;
   status: string;
-  currentUserId: string;
   awardedProviderId: string | null;
   bidders: { providerId: string; officeName: string }[];
   targetProviderId: string | null;
@@ -49,7 +47,6 @@ export async function RequesterChats({
           requestId={requestId}
           providerId={t.providerId}
           initialMessages={t.messages}
-          currentUserId={currentUserId}
           title={`المحادثة مع ${t.officeName}`}
           closed={CLOSED.includes(status)}
         />

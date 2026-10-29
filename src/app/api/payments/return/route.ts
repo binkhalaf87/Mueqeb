@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getPaymentProvider } from "@/lib/payments";
 import { applyPaymentEvent } from "@/lib/payments/process";
 import { serviceDb } from "@/lib/db/server";
+import { logError } from "@/lib/log";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       if (event) await applyPaymentEvent(event);
     }
   } catch (err) {
-    console.error("payment return verification failed", err);
+    logError("payment return verification", err);
   }
 
   return redirectTo(request, `/dashboard/requester/requests/${requestId}?payment=return`);

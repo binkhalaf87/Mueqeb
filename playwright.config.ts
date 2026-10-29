@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 /**
- * يتطلب Supabase محلياً مع بيانات seed: npm run db:start && npm run seed
+ * يتطلب Postgres محلياً مع بيانات seed: npm run db:start && npm run seed
  */
 export default defineConfig({
   testDir: "tests/e2e",
@@ -32,5 +32,7 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
+    // كل الاختبارات من عنوان IP واحد: نرفع حدود المعدل (لا يُضبط هذا أبداً في الإنتاج)
+    env: { RATE_LIMIT_MULTIPLIER: "100" },
   },
 });

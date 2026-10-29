@@ -37,22 +37,34 @@ export async function createAccount(
   }
 }
 
-/** يعيد معرّف المستخدم إن طابقت كلمة المرور، وإلا null (نفس الرد لعدم الوجود ولخطأ كلمة المرور) */
+/**
+ * يعيد معرّف المستخدم إن طابقت كلمة المرور، وإلا null (نفس الرد لعدم الوجود ولخطأ كلمة المرور).
+ * الحساب غير الموجود يُجري حساب bcrypt بنفس الكلفة أيضاً، فلا يكشف زمن الرد وجود الحساب.
+ */
 export async function verifyCredentials(
   identifier: Identifier,
   password: string,
   db: Db = dbFor(SERVICE),
 ): Promise<string | null> {
   const { email, phone } = identifierColumns(identifier);
-  const row = await db.maybeOne<{ id: string }>(
-    `update auth.users
-     set last_sign_in_at = now()
-     where (($1::text is not null and email = $1) or ($2::text is not null and phone = $2))
-       and encrypted_password = public.crypt($3, encrypted_password)
-     returning id`,
+  // تُحسب bcrypt دائماً: على تجزئة الحساب إن وُجد، وإلا على تجزئة وهمية بالكلفة نفسها
+  const row = await db.one<{ id: string | null }>(
+    `with candidate as (
+       select id, encrypted_password from auth.users
+       where ($1::text is not null and email = $1) or ($2::text is not null and phone = $2)
+       limit 1
+     )
+     select case
+              when c.encrypted_password = public.crypt($3, coalesce(c.encrypted_password, d.hash))
+              then c.id
+            end as id
+     from (select public.gen_salt('bf', 10) as hash) d
+     left join candidate c on true`,
     [email, phone, password],
   );
-  return row?.id ?? null;
+  if (!row.id) return null;
+  await db.query("update auth.users set last_sign_in_at = now() where id = $1", [row.id]);
+  return row.id;
 }
 
 /** يتحقق من كلمة المرور الحالية لمستخدم معروف (قبل تغيير بيانات الدخول) */

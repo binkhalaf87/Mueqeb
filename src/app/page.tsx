@@ -31,7 +31,12 @@ export default function HomePage() {
       </section>
 
       <Card>
-        <h2 className="mb-3 font-semibold">الخدمات التي نبدأ بها</h2>
+        <h2 className="mb-3 font-semibold">
+          الخدمات التي نبدأ بها{" "}
+          <Link href="/services" className="ms-2 text-sm font-normal text-primary hover:underline">
+            كل الخدمات ←
+          </Link>
+        </h2>
         <ul className="flex flex-wrap gap-2">
           {SERVICES.map((s) => (
             <li key={s} className="rounded-full bg-primary-soft px-3 py-1 text-sm text-primary">

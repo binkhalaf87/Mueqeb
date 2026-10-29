@@ -3,6 +3,7 @@ import { serviceDb } from "@/lib/db/server";
 import type { Tables } from "@/lib/db/types";
 import { getPaymentProvider } from "./index";
 import { WebhookVerificationError, type PaymentEvent } from "./types";
+import { logError } from "@/lib/log";
 
 export type PaymentOutcome = "processed" | "duplicate" | "ignored" | "failed" | "refund_required";
 
@@ -67,7 +68,7 @@ export async function handleWebhook(rawBody: string, headers: Headers) {
     if (err instanceof WebhookVerificationError) {
       return { status: 401, body: { error: "invalid signature" } };
     }
-    console.error("payment webhook failed", err);
+    logError("payment webhook", err);
     // 500 يجعل البوابة تعيد المحاولة؛ المعالجة idempotent
     return { status: 500, body: { error: "processing failed" } };
   }

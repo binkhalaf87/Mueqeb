@@ -332,6 +332,14 @@ describe.skipIf(!available)("admin operations (local Postgres)", () => {
         in_escrow_halalas: 0,
       });
 
+      // إشعار الصرف للمزوّد بالمبلغ ومرجع التحويل
+      const { data: notes } = await provider.client
+        .from("notifications")
+        .select("kind, body")
+        .eq("kind", "payout");
+      expect(notes).toHaveLength(1);
+      expect(notes![0].body).toContain(ref);
+
       // المزوّد يرى صرفه فقط؛ وسجل الصرف لا يُعدّل
       expect((await provider.client.from("provider_payouts").select("id")).data).toHaveLength(1);
       const other = await makeProvider(`مدينة-${randomUUID().slice(0, 8)}`);

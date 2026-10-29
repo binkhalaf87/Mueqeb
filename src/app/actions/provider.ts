@@ -22,6 +22,7 @@ import {
   providerServiceSchema,
   validateDocumentFile,
 } from "@/lib/providers/validation";
+import { isUuid, uuidField } from "@/lib/validation";
 import type { FormState } from "./auth";
 
 function revalidateProviderPages() {
@@ -216,24 +217,24 @@ export async function saveProviderService(
   }
 
   const serviceId = formData.get("serviceId");
-  const { error } =
-    typeof serviceId === "string" && serviceId
-      ? await attempt(
-          db.query(
-            `update public.provider_services
+  if (serviceId && !isUuid(serviceId)) return { message: "خدمة غير صالحة.", values };
+  const { error } = isUuid(serviceId)
+    ? await attempt(
+        db.query(
+          `update public.provider_services
              set fee_halalas = $3, duration_days = $4, notes = $5
              where id = $1 and provider_id = $2`,
-            [serviceId, provider.id, fee, durationDays, notes ?? null],
-          ),
-        )
-      : await attempt(
-          db.query(
-            `insert into public.provider_services
+          [serviceId, provider.id, fee, durationDays, notes ?? null],
+        ),
+      )
+    : await attempt(
+        db.query(
+          `insert into public.provider_services
                (provider_id, service_type_id, fee_halalas, duration_days, notes)
              values ($1, $2, $3, $4, $5)`,
-            [provider.id, serviceTypeId, fee, durationDays, notes ?? null],
-          ),
-        );
+          [provider.id, serviceTypeId, fee, durationDays, notes ?? null],
+        ),
+      );
 
   if (error) {
     if (error.code === "23505") {
@@ -251,12 +252,13 @@ export async function saveProviderService(
 
 export async function setProviderServiceActive(formData: FormData) {
   const user = await requireRole("provider");
+  const serviceId = uuidField(formData, "serviceId");
   const provider = await getMyProvider(user.id);
-  if (!provider) return;
+  if (!provider || !serviceId) return;
   const db = await getDb();
   await attempt(
     db.query("update public.provider_services set active = $3 where id = $1 and provider_id = $2", [
-      String(formData.get("serviceId")),
+      serviceId,
       provider.id,
       formData.get("active") === "true",
     ]),
@@ -266,12 +268,13 @@ export async function setProviderServiceActive(formData: FormData) {
 
 export async function deleteProviderService(formData: FormData) {
   const user = await requireRole("provider");
+  const serviceId = uuidField(formData, "serviceId");
   const provider = await getMyProvider(user.id);
-  if (!provider) return;
+  if (!provider || !serviceId) return;
   const db = await getDb();
   await attempt(
     db.query("delete from public.provider_services where id = $1 and provider_id = $2", [
-      String(formData.get("serviceId")),
+      serviceId,
       provider.id,
     ]),
   );

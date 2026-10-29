@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getDb, serviceDb } from "@/lib/db/server";
 import { refundAtGateway } from "@/lib/payments/process";
 import type { FormState } from "@/app/actions/auth";
+import { logError } from "@/lib/log";
 
 /**
  * الإلغاء بعد بدء التنفيذ: يُحتسب للمزوّد جزء من أتعابه (نسبة من الإعدادات)، ويُسترد الباقي للعميل
@@ -25,7 +26,7 @@ export async function cancelInProgress(requestId: string, actorId: string): Prom
   try {
     refundRef = await refundAtGateway(order.id, refund);
   } catch (err) {
-    console.error("partial refund failed", err);
+    logError("partial refund", err);
     return { message: "تعذّر الاسترداد من بوابة الدفع؛ لم يُلغَ الطلب. حاول لاحقاً." };
   }
   const { error: cancelError } = await serviceDb().rpc("cancel_after_start", {
@@ -34,7 +35,7 @@ export async function cancelInProgress(requestId: string, actorId: string): Prom
     p_actor_id: actorId,
   });
   if (cancelError) {
-    console.error("cancel after start failed after gateway refund", cancelError);
+    logError("cancel after start (after gateway refund)", cancelError);
     return { message: "حدث خطأ بعد الاسترداد؛ أُبلغت الإدارة." };
   }
   revalidatePath("/dashboard/requester", "layout");

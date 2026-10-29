@@ -31,16 +31,17 @@ export async function getRequestDocuments(requestId: string) {
 
 export type RequestDocument = Awaited<ReturnType<typeof getRequestDocuments>>[number];
 
+/** رسالة كما تصل للواجهة: بلا معرّف المرسل (mine تُحسب في الخادم فلا يُكشف معرّف الطرف الآخر) */
 export type ChatMessage = Pick<
   Tables<"messages">,
-  "id" | "sender_id" | "sender_role" | "body" | "was_masked" | "created_at"
->;
+  "id" | "sender_role" | "body" | "was_masked" | "created_at"
+> & { mine: boolean };
 
 /** رسائل خيط (طلب، مزوّد) بعد معرّف معيّن — RLS يقصرها على أطراف الخيط */
 export async function getThreadMessages(requestId: string, providerId: string, afterId = 0) {
   const db = await getDb();
   return db.query<ChatMessage>(
-    `select id, sender_id, sender_role, body, was_masked, created_at
+    `select id, sender_role, body, was_masked, created_at, sender_id = auth.uid() as mine
      from public.messages
      where request_id = $1 and provider_id = $2 and id > $3
      order by id`,

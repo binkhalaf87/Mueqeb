@@ -257,7 +257,6 @@ export default async function ProviderRequestPage({
           requestId={request.id}
           providerId={provider.id}
           initialMessages={messages}
-          currentUserId={user.id}
           title="المحادثة مع العميل"
           closed={["completed", "resolved", "cancelled", "expired"].includes(request.status)}
         />

@@ -11,6 +11,7 @@ import {
   mentionsCredentials,
 } from "@/lib/contact-info";
 import type { FunctionArgs } from "@/lib/db/types";
+import { INVALID_INPUT_MESSAGE, uuidField } from "@/lib/validation";
 import type { FormState } from "./auth";
 
 const score = z.coerce
@@ -42,7 +43,8 @@ export async function submitReview(_prev: FormState, formData: FormData): Promis
   const user = await getCurrentUser();
   if (!user || (user.role !== "requester" && user.role !== "provider"))
     return { message: "غير مصرح." };
-  const requestId = String(formData.get("requestId") ?? "");
+  const requestId = uuidField(formData, "requestId");
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   const db = await getDb();
 
   let args: FunctionArgs<"submit_review">;

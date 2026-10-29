@@ -23,14 +23,12 @@ export function Chat({
   requestId,
   providerId,
   initialMessages,
-  currentUserId,
   title,
   closed,
 }: {
   requestId: string;
   providerId: string;
   initialMessages: ChatMessage[];
-  currentUserId: string;
   title: string;
   closed?: boolean;
 }) {
@@ -95,7 +93,7 @@ export function Chat({
       >
         {messages.length === 0 && <li className="text-sm text-muted">لا توجد رسائل بعد.</li>}
         {messages.map((m) => {
-          const mine = m.sender_id === currentUserId;
+          const mine = m.mine;
           return (
             <li key={m.id} className={`flex ${mine ? "justify-start" : "justify-end"}`}>
               <div

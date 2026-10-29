@@ -7,10 +7,12 @@ import { fieldErrors } from "@/lib/auth/validation";
 import { formatHalalas } from "@/lib/money";
 import { rpcErrorMessage } from "@/lib/requests/constants";
 import { bidSchema } from "@/lib/requests/validation";
+import { INVALID_INPUT_MESSAGE, uuidField } from "@/lib/validation";
+import { RATE_LIMIT_MESSAGE, takeRateLimit } from "@/lib/auth/rate-limit";
 import type { FormState } from "./auth";
 
 export async function submitBid(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireRole("provider");
+  const user = await requireRole("provider");
   const parsed = bidSchema.safeParse({
     requestId: formData.get("requestId"),
     fee: formData.get("fee") ?? "",
@@ -22,6 +24,7 @@ export async function submitBid(_prev: FormState, formData: FormData): Promise<F
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
   const input = parsed.data;
+  if (!takeRateLimit("bid", user.id)) return { message: RATE_LIMIT_MESSAGE };
   const db = await getDb();
 
   // رسالة أوضح للحد الأدنى قبل الوصول للقاعدة (القاعدة تتحقق أيضاً)
@@ -54,9 +57,9 @@ export async function submitBid(_prev: FormState, formData: FormData): Promise<F
 export async function withdrawBid(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("provider");
   const db = await getDb();
-  const { error } = await db.rpc("withdraw_bid", {
-    p_bid_id: String(formData.get("bidId") ?? ""),
-  });
+  const bidId = uuidField(formData, "bidId");
+  if (!bidId) return { message: INVALID_INPUT_MESSAGE };
+  const { error } = await db.rpc("withdraw_bid", { p_bid_id: bidId });
   if (error) return { message: rpcErrorMessage(error) };
   revalidatePath("/dashboard/provider", "layout");
   revalidatePath("/dashboard/requester", "layout");

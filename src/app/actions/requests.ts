@@ -9,7 +9,10 @@ import { cancelInProgress } from "@/lib/execution/cancel";
 import { fieldErrors } from "@/lib/auth/validation";
 import { rpcErrorMessage } from "@/lib/requests/constants";
 import { createRequestSchema } from "@/lib/requests/validation";
+import { INVALID_INPUT_MESSAGE, uuidField } from "@/lib/validation";
+import { RATE_LIMIT_MESSAGE, takeRateLimit } from "@/lib/auth/rate-limit";
 import type { FormState } from "./auth";
+import { logError } from "@/lib/log";
 
 function revalidateRequestPages() {
   revalidatePath("/dashboard/requester", "layout");
@@ -17,7 +20,7 @@ function revalidateRequestPages() {
 }
 
 export async function createRequest(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireRole("requester");
+  const user = await requireRole("requester");
   const parsed = createRequestSchema.safeParse({
     mode: formData.get("mode"),
     accountId: formData.get("accountId"),
@@ -32,6 +35,7 @@ export async function createRequest(_prev: FormState, formData: FormData): Promi
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
   const input = parsed.data;
+  if (!takeRateLimit("request", user.id)) return { message: RATE_LIMIT_MESSAGE };
   const db = await getDb();
   const { data: requestId, error } = await db.rpc("create_service_request", {
     p_requester_account_id: input.accountId,
@@ -56,7 +60,8 @@ export async function createRequest(_prev: FormState, formData: FormData): Promi
 
 export async function acceptBid(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("requester");
-  const bidId = String(formData.get("bidId") ?? "");
+  const bidId = uuidField(formData, "bidId");
+  if (!bidId) return { message: INVALID_INPUT_MESSAGE };
   const db = await getDb();
   const { error } = await db.rpc("accept_bid", { p_bid_id: bidId });
   if (error) return { message: rpcErrorMessage(error) };
@@ -66,7 +71,8 @@ export async function acceptBid(_prev: FormState, formData: FormData): Promise<F
 
 export async function cancelRequest(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireRole("requester");
-  const requestId = String(formData.get("requestId") ?? "");
+  const requestId = uuidField(formData, "requestId");
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   const db = await getDb();
 
   // القراءة بصلاحيات المستخدم (RLS) تضمن أنه عضو في حساب الطلب
@@ -101,7 +107,7 @@ export async function cancelRequest(_prev: FormState, formData: FormData): Promi
         note: "ألغاه العميل قبل بدء التنفيذ — استرداد كامل",
       });
     } catch (err) {
-      console.error("refund failed", err);
+      logError("refund", err);
       return { message: "تعذّر الاسترداد من بوابة الدفع؛ لم يُلغَ الطلب. حاول لاحقاً." };
     }
     revalidateRequestPages();

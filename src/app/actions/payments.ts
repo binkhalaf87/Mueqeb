@@ -7,7 +7,9 @@ import { getDb, serviceDb } from "@/lib/db/server";
 import { getPaymentProvider } from "@/lib/payments";
 import { MOCK_TEST_CARDS, MockGateway } from "@/lib/payments/mock-gateway";
 import { handleWebhook } from "@/lib/payments/process";
+import { INVALID_INPUT_MESSAGE, uuidField } from "@/lib/validation";
 import type { FormState } from "./auth";
+import { logError } from "@/lib/log";
 
 /** أصل الموقع العام لروابط العودة من البوابة: APP_URL (نطاق الواجهة) إن حُدد، وإلا من الطلب */
 async function appOrigin() {
@@ -21,7 +23,8 @@ async function appOrigin() {
 /** يبدأ الدفع: ينشئ جلسة في البوابة ويسجّل المحاولة ثم يحوّل العميل لصفحة البوابة */
 export async function startPayment(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("requester");
-  const requestId = String(formData.get("requestId") ?? "");
+  const requestId = uuidField(formData, "requestId");
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   const db = await getDb();
 
   // القراءة بصلاحيات المستخدم (RLS): يضمن أنه عضو في حساب الطلب
@@ -62,7 +65,7 @@ export async function startPayment(_prev: FormState, formData: FormData): Promis
     if (error) throw error;
     redirectUrl = session.redirectUrl;
   } catch (err) {
-    console.error("start payment failed", err);
+    logError("start payment", err);
     return { message: "تعذّر بدء الدفع، حاول مرة أخرى." };
   }
   redirect(redirectUrl);
@@ -77,6 +80,7 @@ export async function payWithTestCard(_prev: FormState, formData: FormData): Pro
   if (!(provider instanceof MockGateway)) return { message: "بوابة الاختبار غير مفعّلة." };
 
   const ref = String(formData.get("ref") ?? "");
+  if (!/^mock_pay_[A-Za-z0-9_-]{1,80}$/.test(ref)) return { message: INVALID_INPUT_MESSAGE };
   const card = String(formData.get("card") ?? "").replace(/\s+/g, "");
   if (card !== MOCK_TEST_CARDS.success && card !== MOCK_TEST_CARDS.declined) {
     return {

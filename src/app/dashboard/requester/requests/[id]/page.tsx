@@ -28,7 +28,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function RequesterRequestPage({
   params,
 }: PageProps<"/dashboard/requester/requests/[id]">) {
-  const user = await requireRole("requester");
+  await requireRole("requester");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const db = await getDb();
@@ -349,7 +349,6 @@ export default async function RequesterRequestPage({
       <RequesterChats
         requestId={request.id}
         status={request.status}
-        currentUserId={user.id}
         awardedProviderId={awarded?.provider_id ?? null}
         targetProviderId={request.target_provider_id}
         bidders={(bids ?? [])

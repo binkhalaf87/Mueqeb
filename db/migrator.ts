@@ -15,6 +15,7 @@ export async function migrate(databaseUrl: string, log = console.log) {
         version text primary key,
         applied_at timestamptz not null default now()
       );
+      alter table migrations.applied enable row level security;
     `);
     // قفل يمنع تشغيلين متزامنين (نشران متتاليان مثلاً)
     await client.query("select pg_advisory_lock(hashtext('mueqeb_migrations'))");

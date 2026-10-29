@@ -5,6 +5,8 @@
  * بهوية الخادم (service_role) ويُسجَّل وقت آخر تشغيل وآخر خطأ.
  */
 import { dbFor, SERVICE } from "@/lib/db/core";
+import { deliverPendingNotifications } from "@/lib/notifications/deliver";
+import { logError } from "@/lib/log";
 
 const TICK_MS = 60_000;
 const LOCK_KEY = "mueqeb_scheduler";
@@ -44,7 +46,7 @@ export async function runDueJobs(now = Date.now()) {
       } catch (err) {
         await tx.query("rollback to savepoint job");
         error = (err as Error).message;
-        console.error(`scheduled job ${job.jobname} failed`, err);
+        logError(`scheduled job ${job.jobname}`, err);
       }
       await tx.query(
         "update cron.job set last_run_at = now(), last_error = $2 where jobname = $1",
@@ -60,7 +62,11 @@ const state = globalThis as unknown as { __mueqebScheduler?: ReturnType<typeof s
 
 export function startScheduler() {
   if (state.__mueqebScheduler) return;
-  const tick = () => runDueJobs().catch((err) => console.error("scheduler tick failed", err));
+  const tick = async () => {
+    await runDueJobs().catch((err) => logError("scheduler tick", err));
+    // الإشعارات الخارجية (البريد) من صندوق الإرسال
+    await deliverPendingNotifications().catch((err) => logError("notification delivery", err));
+  };
   state.__mueqebScheduler = setInterval(tick, TICK_MS);
   state.__mueqebScheduler.unref?.();
   setTimeout(tick, 5_000).unref?.();

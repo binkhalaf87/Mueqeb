@@ -98,6 +98,12 @@ completed | disputed → resolved
 - لوحة الإدارة: كل رقم مالي من الدفتر عبر `admin_kpis` و`ledger_account_balances`؛ كل تغيير إداري يُسجَّل
   في `admin_audit_log` (append-only) عبر triggers أو دوال الإدارة.
 - ترتيب المزوّدين في التصفح: المعادلة والأوزان في `src/lib/providers/ranking.ts`.
+- الإشعارات: triggers في القاعدة تستدعي `notify()` فتُنشئ صفاً في `notifications` و`notification_outbox`؛
+  المُجدول يرسل البريد عبر `NotificationProvider` (`src/lib/notifications`، `EMAIL_PROVIDER=log|resend`، واتساب معطّل).
+- الأمان: `tests/integration/security.test.ts` يحوي القوائم المراجَعة لصلاحيات الكتابة ودوال الزائر؛ أي جدول أو صلاحية
+  جديدة تتطلب تحديثها عن قصد. حدود المعدل في `src/lib/auth/rate-limit.ts` (`RATE_LIMIT_MULTIPLIER` للاختبارات فقط)،
+  والتحقق من المعرّفات في `src/lib/validation.ts`، والأخطاء تُسجَّل بـ `logError` (`src/lib/log.ts`) لا `console.error`.
+- النشر: `docs/deploy.md`.
 - بعد أي migration: `npm run db:reset && npm run seed && npm run db:types` (Postgres محلي: `npm run db:start`).
 - الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`
   ثم `npm run test:e2e` (يحتاج Postgres محلياً + seed).

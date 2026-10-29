@@ -15,6 +15,9 @@ import { parseSarToHalalas } from "@/lib/money";
 import { rpcErrorMessage } from "@/lib/requests/constants";
 import { refundAtGateway } from "@/lib/payments/process";
 import type { FormState } from "./auth";
+import { logError } from "@/lib/log";
+import { INVALID_INPUT_MESSAGE, uuidField } from "@/lib/validation";
+import { RATE_LIMIT_MESSAGE, takeRateLimit } from "@/lib/auth/rate-limit";
 
 const EXECUTION_ERRORS: Record<string, string> = {
   delegation_not_confirmed: "بانتظار تأكيد العميل لمنح التفويض.",
@@ -37,15 +40,17 @@ function revalidateAll() {
   revalidatePath("/admin", "layout");
 }
 
-const requestIdOf = (formData: FormData) => String(formData.get("requestId") ?? "");
+const requestIdOf = (formData: FormData) => uuidField(formData, "requestId");
 
 // ============ العميل ============
 
 export async function confirmDelegation(_prev: FormState, formData: FormData): Promise<FormState> {
+  const requestId = requestIdOf(formData);
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   await requireRole("requester");
   const db = await getDb();
   const { error } = await db.rpc("confirm_delegation", {
-    p_request_id: requestIdOf(formData),
+    p_request_id: requestId,
   });
   if (error) return { message: message(error) };
   revalidateAll();
@@ -53,10 +58,12 @@ export async function confirmDelegation(_prev: FormState, formData: FormData): P
 }
 
 export async function confirmCompletion(_prev: FormState, formData: FormData): Promise<FormState> {
+  const requestId = requestIdOf(formData);
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   await requireRole("requester");
   const db = await getDb();
   const { error } = await db.rpc("confirm_completion", {
-    p_request_id: requestIdOf(formData),
+    p_request_id: requestId,
   });
   if (error) return { message: message(error) };
   revalidateAll();
@@ -64,13 +71,15 @@ export async function confirmCompletion(_prev: FormState, formData: FormData): P
 }
 
 export async function openDispute(_prev: FormState, formData: FormData): Promise<FormState> {
+  const requestId = requestIdOf(formData);
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   await requireRole("requester");
   const reason = String(formData.get("reason") ?? "").trim();
   if (reason.length < 5) return { errors: { reason: "اكتب سبب الاعتراض (5 أحرف على الأقل)." } };
   if (mentionsCredentials(reason)) return { errors: { reason: CREDENTIALS_MESSAGE } };
   const db = await getDb();
   const { error } = await db.rpc("open_dispute", {
-    p_request_id: requestIdOf(formData),
+    p_request_id: requestId,
     p_reason: reason,
   });
   if (error) return { message: message(error) };
@@ -81,22 +90,26 @@ export async function openDispute(_prev: FormState, formData: FormData): Promise
 // ============ المزوّد ============
 
 export async function startExecution(_prev: FormState, formData: FormData): Promise<FormState> {
+  const requestId = requestIdOf(formData);
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   await requireRole("provider");
   const db = await getDb();
-  const { error } = await db.rpc("start_execution", { p_request_id: requestIdOf(formData) });
+  const { error } = await db.rpc("start_execution", { p_request_id: requestId });
   if (error) return { message: message(error) };
   revalidateAll();
   return { message: "بدأ التنفيذ." };
 }
 
 export async function submitDelivery(_prev: FormState, formData: FormData): Promise<FormState> {
+  const requestId = requestIdOf(formData);
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   await requireRole("provider");
   const note = String(formData.get("note") ?? "").trim();
   if (note.length < 5) return { errors: { note: "اكتب وصفاً لما أُنجز." } };
   if (mentionsCredentials(note)) return { errors: { note: CREDENTIALS_MESSAGE } };
   const db = await getDb();
   const { error } = await db.rpc("submit_delivery", {
-    p_request_id: requestIdOf(formData),
+    p_request_id: requestId,
     p_note: note,
   });
   if (error) return { message: message(error), values: { note } };
@@ -115,7 +128,7 @@ export async function uploadRequestDocument(
     return { message: "غير مصرح." };
   }
   const requestId = requestIdOf(formData);
-  if (!z.uuid().safeParse(requestId).success) return { message: "طلب غير صالح." };
+  if (!requestId) return { message: "طلب غير صالح." };
   const kind = user.role === "provider" ? "delivery_proof" : "client_document";
   const label =
     String(formData.get("label") ?? "")
@@ -171,12 +184,16 @@ export async function sendMessage(
 ): Promise<SendMessageState> {
   const user = await getCurrentUser();
   if (!user) return { status: "error", message: "سجّل الدخول." };
+  const requestId = requestIdOf(formData);
+  const providerId = uuidField(formData, "providerId");
+  if (!requestId || !providerId) return { status: "error", message: INVALID_INPUT_MESSAGE };
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return { status: "error", message: "اكتب رسالة." };
+  if (!takeRateLimit("message", user.id)) return { status: "error", message: RATE_LIMIT_MESSAGE };
   const db = await getDb();
   const { data, error } = await db.rpc("send_message", {
-    p_request_id: requestIdOf(formData),
-    p_provider_id: String(formData.get("providerId") ?? ""),
+    p_request_id: requestId,
+    p_provider_id: providerId,
     p_body: body.slice(0, 2000),
   });
   if (error) return { status: "error", message: message(error) };
@@ -253,7 +270,7 @@ export async function resolveDispute(_prev: FormState, formData: FormData): Prom
   try {
     refundRef = await refundAtGateway(order.id, amount);
   } catch (err) {
-    console.error("dispute refund failed", err);
+    logError("dispute refund", err);
     return { message: "تعذّر الاسترداد من بوابة الدفع؛ لم يُسجّل القرار." };
   }
   const { error } = await serviceDb().rpc("resolve_dispute", {
@@ -274,7 +291,8 @@ export async function updateDelegationGuide(
   formData: FormData,
 ): Promise<FormState> {
   const user = await requireRole("admin");
-  const platform = String(formData.get("platform") ?? "");
+  const platform = z.enum(["qiwa", "balady", "mc", "none"]).safeParse(formData.get("platform"));
+  if (!platform.success) return { message: INVALID_INPUT_MESSAGE };
   const title = String(formData.get("title") ?? "").trim();
   const steps = String(formData.get("steps") ?? "")
     .split("\n")
@@ -292,7 +310,7 @@ export async function updateDelegationGuide(
       `update public.delegation_guides
        set title = $2, steps = $3, updated_at = now(), updated_by = $4
        where platform = $1`,
-      [platform, title, steps, user.id],
+      [platform.data, title, steps, user.id],
     ),
   );
   if (error) return { message: "تعذّر الحفظ." };

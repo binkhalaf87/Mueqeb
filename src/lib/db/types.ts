@@ -100,6 +100,31 @@ export type Database = {
           created_at: string;
         };
       };
+      notification_outbox: {
+        Row: {
+          id: number;
+          notification_id: number;
+          channel: string;
+          status: string;
+          attempts: number;
+          last_error: string | null;
+          created_at: string;
+          sent_at: string | null;
+        };
+      };
+      notifications: {
+        Row: {
+          id: number;
+          user_id: string;
+          kind: string;
+          title: string;
+          body: string;
+          link: string | null;
+          dedupe_key: string | null;
+          read_at: string | null;
+          created_at: string;
+        };
+      };
       order_events: {
         Row: {
           id: number;
@@ -384,6 +409,7 @@ export type Database = {
     Functions: {
       accept_bid: { Args: { p_bid_id: string }; Returns: undefined };
       admin_kpis: { Args: Record<string, never>; Returns: Json };
+      awarded_provider_id: { Args: { p_request_id: string }; Returns: string };
       blocked_term_in: { Args: { p_text: string }; Returns: string };
       can_access_thread: {
         Args: { p_request_id: string; p_provider_id: string };
@@ -458,6 +484,42 @@ export type Database = {
       mentions_credentials: { Args: { p_text: string }; Returns: boolean };
       my_login: { Args: Record<string, never>; Returns: { email: string; phone: string }[] };
       my_provider_earnings: { Args: Record<string, never>; Returns: Json };
+      notify: {
+        Args: {
+          p_user_id: string;
+          p_kind: string;
+          p_title: string;
+          p_body: string;
+          p_link: string;
+          p_dedupe_key?: string;
+        };
+        Returns: undefined;
+      };
+      notify_admins: {
+        Args: { p_kind: string; p_title: string; p_body: string; p_link: string };
+        Returns: undefined;
+      };
+      notify_provider: {
+        Args: {
+          p_provider_id: string;
+          p_request_id: string;
+          p_kind: string;
+          p_title: string;
+          p_body: string;
+          p_dedupe_key?: string;
+        };
+        Returns: undefined;
+      };
+      notify_request_members: {
+        Args: {
+          p_request_id: string;
+          p_kind: string;
+          p_title: string;
+          p_body: string;
+          p_dedupe_key?: string;
+        };
+        Returns: undefined;
+      };
       open_dispute: { Args: { p_request_id: string; p_reason: string }; Returns: undefined };
       order_ledger_balances: {
         Args: { p_order_id: string };
@@ -548,6 +610,14 @@ export type Database = {
           from_fee_halalas: number;
         }[];
       };
+      public_service_overview: {
+        Args: { p_service_type_id: string };
+        Returns: {
+          providers_count: number;
+          from_fee_halalas: number;
+          typical_duration_days: number;
+        }[];
+      };
       record_payment_result: {
         Args: {
           p_gateway: string;
@@ -591,6 +661,7 @@ export type Database = {
         };
         Returns: string;
       };
+      remind_confirmation_deadlines: { Args: Record<string, never>; Returns: number };
       request_bids: {
         Args: { p_request_id: string };
         Returns: {

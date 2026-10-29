@@ -6,7 +6,14 @@ import { redirect } from "next/navigation";
 import { getDb, serviceDb } from "@/lib/db/server";
 import { endSession, getCurrentUser, startSession } from "@/lib/auth/session";
 import { createAccount, verifyCredentials } from "@/lib/auth/accounts";
-import { clearLoginFailures, isLoginBlocked, recordLoginFailure } from "@/lib/auth/rate-limit";
+import {
+  clearLoginFailures,
+  clientIp,
+  isLoginBlocked,
+  RATE_LIMIT_MESSAGE,
+  recordLoginFailure,
+  takeRateLimit,
+} from "@/lib/auth/rate-limit";
 import { homePathForRole, safeNextPath } from "@/lib/auth/routes";
 import { fieldErrors, onboardingSchema, signInSchema, signUpSchema } from "@/lib/auth/validation";
 
@@ -31,6 +38,9 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
   const { fullName, identifier, password } = parsed.data;
+  if (!takeRateLimit("signup", clientIp(await headers()))) {
+    return { message: RATE_LIMIT_MESSAGE, values };
+  }
   const result = await createAccount(identifier, password, fullName);
   if (!result.ok) {
     if (result.reason === "exists") {
@@ -53,7 +63,7 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
   const { identifier } = parsed.data;
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const ip = clientIp(await headers());
   const limitKeys = [
     `id:${identifier.kind === "email" ? identifier.email : identifier.phone}`,
     `ip:${ip}`,

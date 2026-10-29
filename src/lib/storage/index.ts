@@ -16,7 +16,7 @@ const BUCKET_ID = /^[a-z0-9-]+$/;
 const SEGMENT = /^[A-Za-z0-9._-]+$/;
 
 function storageRoot() {
-  return path.resolve(process.env.STORAGE_DIR ?? ".data/storage");
+  return path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_DIR ?? ".data/storage");
 }
 
 /** مسار آمن على القرص: يرفض أي مقطع غير مألوف ("..", شرطات مائلة عكسية، إلخ) */
@@ -25,7 +25,7 @@ function filePath(bucket: string, objectPath: string) {
   if (!BUCKET_ID.test(bucket) || !segments.every((s) => SEGMENT.test(s) && s !== "..")) {
     throw new Error("مسار ملف غير صالح");
   }
-  return path.join(storageRoot(), bucket, ...segments);
+  return path.join(/*turbopackIgnore: true*/ storageRoot(), bucket, ...segments);
 }
 
 export type UploadError = "forbidden" | "too_large" | "bad_type" | "exists";

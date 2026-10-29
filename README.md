@@ -27,7 +27,7 @@ npm run dev                        # http://localhost:3000
 
 - **GitHub** `binkhalaf87/Mueqeb`: كل push على الفرع المربوط ينشر الطرفين تلقائياً.
 - **Railway** (مشروع `mueqeb`): خدمة `web` تبني التطبيق (`railway.json`).
-  - تطبّق الـ migrations قبل كل نشر.
+  - تطبّق الـ migrations عند كل تشغيل قبل بدء الخادم (`npm run start:railway`).
   - تفحص `/api/health`.
   - تشغّل المهام المجدولة.
   - تستقبل webhooks الدفع.

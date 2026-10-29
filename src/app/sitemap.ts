@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 import { ANON, dbFor } from "@/lib/db/core";
 import { siteUrl } from "@/lib/site";
 
+// تُبنى عند الطلب: القاعدة غير متاحة وقت البناء، والخدمات والمكاتب تتغير
+export const dynamic = "force-dynamic";
+
 /** خريطة الموقع: الصفحات العامة، وكل نوع خدمة فعّال، وصفحات المكاتب المعتمدة (بصلاحيات الزائر) */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();

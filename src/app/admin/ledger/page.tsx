@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { formatHalalas } from "@/lib/money";
 import { formatDateTime } from "@/lib/format";
 import { ledgerImbalance } from "@/lib/payments/amounts";
@@ -18,18 +19,29 @@ const ACCOUNT_LABEL: Record<string, string> = {
 
 export default async function LedgerPage() {
   await requireRole("admin");
-  const supabase = await createClient();
-  const { data: entries } = await supabase
-    .from("ledger_entries")
-    .select(
-      "id, journal_id, order_id, account, debit_halalas, credit_halalas, description, reverses_journal_id, created_at",
-    )
-    .order("id", { ascending: false })
-    .limit(500); // آخر القيود للعرض؛ الأرصدة أعلاه من كل القيود
-  const rows = entries ?? [];
+  const db = await getDb();
+  // آخر القيود للعرض؛ الأرصدة أعلاه من كل القيود
+  const rows = await db.query<
+    Pick<
+      Tables<"ledger_entries">,
+      | "id"
+      | "journal_id"
+      | "order_id"
+      | "account"
+      | "debit_halalas"
+      | "credit_halalas"
+      | "description"
+      | "reverses_journal_id"
+      | "created_at"
+    >
+  >(
+    `select id, journal_id, order_id, account, debit_halalas, credit_halalas, description,
+            reverses_journal_id, created_at
+     from public.ledger_entries order by id desc limit 500`,
+  );
 
   // أرصدة الحسابات (مدين − دائن) على مستوى المنصة — من كل القيود في قاعدة البيانات
-  const { data: accountBalances } = await supabase.rpc("ledger_account_balances");
+  const { data: accountBalances } = await db.rpc("ledger_account_balances");
   const balances = new Map(
     (accountBalances ?? []).map((b) => [b.account, Number(b.balance_halalas)]),
   );

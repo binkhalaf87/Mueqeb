@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { getProviderDocuments } from "@/lib/providers/queries";
 import { DOCUMENT_TYPES, providerStage } from "@/lib/providers/constants";
 import { formatHalalas } from "@/lib/money";
@@ -15,21 +16,34 @@ export const metadata: Metadata = { title: "مراجعة مزوّد" };
 export default async function AdminProviderPage({ params }: PageProps<"/admin/providers/[id]">) {
   await requireRole("admin");
   const { id } = await params;
-  const supabase = await createClient();
+  const db = await getDb();
 
-  const { data: provider } = await supabase
-    .from("providers")
-    .select("*, profiles!providers_profile_id_fkey(full_name, phone)")
-    .eq("id", id)
-    .maybeSingle();
+  const provider = await db.maybeOne<
+    Tables<"providers"> & { profiles: { full_name: string; phone: string | null } | null }
+  >(
+    `select pr.*,
+            case when p.id is null then null else json_build_object(
+              'full_name', p.full_name, 'phone', p.phone) end as profiles
+     from public.providers pr left join public.profiles p on p.id = pr.profile_id
+     where pr.id = $1`,
+    [id],
+  );
   if (!provider) notFound();
 
-  const [documents, { data: services }] = await Promise.all([
+  const [documents, services] = await Promise.all([
     getProviderDocuments(provider.id),
-    supabase
-      .from("provider_services")
-      .select("id, fee_halalas, duration_days, active, service_types(name_ar)")
-      .eq("provider_id", provider.id),
+    db.query<
+      Pick<Tables<"provider_services">, "id" | "fee_halalas" | "duration_days" | "active"> & {
+        service_types: { name_ar: string } | null;
+      }
+    >(
+      `select s.id, s.fee_halalas, s.duration_days, s.active,
+              case when t.id is null then null else json_build_object('name_ar', t.name_ar) end
+                as service_types
+       from public.provider_services s left join public.service_types t on t.id = s.service_type_id
+       where s.provider_id = $1`,
+      [provider.id],
+    ),
   ]);
   const docByType = new Map(documents.map((d) => [d.doc_type, d]));
   const stage = providerStage(provider);

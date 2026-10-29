@@ -1,35 +1,39 @@
 /**
- * ينشئ مستخدمين تجريبيين في Supabase المحلي:
- * مدير، مزوّدان، طالب خدمة فرد، طالب خدمة منشأة.
- * المزوّد 1 معتمد مع خدمات، والمزوّد 2 مُرسل وبانتظار التوثيق.
+ * ينشئ بيانات تجريبية: مدير، 4 مزوّدين، طالب خدمة فرد، طالب خدمة منشأة،
+ * طلب عام مفتوح بعرض، و3 طلبات مكتملة بتقييمات متبادلة.
+ * المزوّدون 1 و3 و4 معتمدون مع خدمات، والمزوّد 2 مُرسل وبانتظار التوثيق.
  * (فئات وأنواع الخدمات تأتي من migration لأنها بيانات مرجعية)
  *
  * التشغيل: npm run seed  (يقرأ .env.local)
- * آمن لإعادة التشغيل: يتخطى المستخدمين الموجودين.
+ * آمن لإعادة التشغيل: يتخطى ما هو موجود.
+ * على قاعدة بعيدة: SEED_ALLOW_REMOTE=1 وكلمة مرور خاصة SEED_PASSWORD (لا تُستخدم الافتراضية المنشورة).
  */
 import { config } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "../src/lib/supabase/database.types";
+import { asUser, closePools, dbFor, SERVICE, type RpcResult } from "../src/lib/db/core";
+import { createAccount, verifyCredentials } from "../src/lib/auth/accounts";
+import { uploadObject } from "../src/lib/storage";
+import type { Database } from "../src/lib/db/types";
 
 config({ path: ".env.local", quiet: true });
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const secretKey = process.env.SUPABASE_SECRET_KEY;
-if (!url || !secretKey) {
-  console.error("NEXT_PUBLIC_SUPABASE_URL و SUPABASE_SECRET_KEY مطلوبة في .env.local");
+const url = process.env.DATABASE_URL;
+if (!url) {
+  console.error("DATABASE_URL مطلوب في .env.local");
   process.exit(1);
 }
-if (
-  !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/.test(url) &&
-  process.env.SEED_ALLOW_REMOTE !== "1"
-) {
+const isLocal = ["localhost", "127.0.0.1"].includes(new URL(url).hostname);
+if (!isLocal && process.env.SEED_ALLOW_REMOTE !== "1") {
   console.error(
-    `رفض التشغيل على ${url}. السكربت للبيئة المحلية فقط (SEED_ALLOW_REMOTE=1 للتجاوز).`,
+    `رفض التشغيل على ${new URL(url).hostname}. السكربت للبيئة المحلية (SEED_ALLOW_REMOTE=1 للتجاوز).`,
   );
   process.exit(1);
 }
+if (!isLocal && !process.env.SEED_PASSWORD) {
+  console.error("على قاعدة بعيدة حدّد SEED_PASSWORD (كلمة المرور الافتراضية منشورة في المستودع).");
+  process.exit(1);
+}
 
-const SEED_PASSWORD = "Mueqeb#2026";
+const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "Mueqeb#2026";
 
 type SeedProvider = {
   officeName: string;
@@ -162,60 +166,45 @@ const USERS: SeedUser[] = [
   },
 ];
 
-const supabase = createClient<Database>(url, secretKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+const service = dbFor(SERVICE);
 
-async function findUserId(user: SeedUser): Promise<string | null> {
-  const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-  if (error) throw error;
-  const phone = user.phone?.replace(/^\+/, "");
-  const found = data.users.find((u) => (user.email ? u.email === user.email : u.phone === phone));
-  return found?.id ?? null;
+function identifierOf(user: { email?: string; phone?: string }) {
+  return user.email
+    ? ({ kind: "email", email: user.email } as const)
+    : ({ kind: "phone", phone: user.phone! } as const);
 }
 
 async function seedUser(user: SeedUser) {
-  let id = await findUserId(user);
-  if (id) {
+  const created = await createAccount(identifierOf(user), SEED_PASSWORD, user.fullName, service);
+  if (!created.ok) {
     console.log(`• ${user.label}: موجود مسبقاً`);
     return;
   }
-
-  const { data, error } = await supabase.auth.admin.createUser({
-    email: user.email,
-    phone: user.phone,
-    password: SEED_PASSWORD,
-    email_confirm: Boolean(user.email),
-    phone_confirm: Boolean(user.phone),
-    user_metadata: { full_name: user.fullName },
-  });
-  if (error) throw error;
-  id = data.user.id;
+  const id = created.userId;
 
   if (user.account) {
-    const { data: account, error: accError } = await supabase
-      .from("requester_accounts")
-      .insert({
-        account_type: user.account.type,
-        establishment_name: user.account.type === "establishment" ? user.account.name : null,
-        cr_number: user.account.type === "establishment" ? user.account.crNumber : null,
-        created_by: id,
-      })
-      .select("id")
-      .single();
-    if (accError) throw accError;
-
-    const { error: memberError } = await supabase
-      .from("establishment_members")
-      .insert({ account_id: account.id, user_id: id, member_role: "owner" });
-    if (memberError) throw memberError;
+    const account = await service.one<{ id: string }>(
+      `insert into public.requester_accounts (account_type, establishment_name, cr_number, created_by)
+       values ($1, $2, $3, $4) returning id`,
+      [
+        user.account.type,
+        user.account.type === "establishment" ? user.account.name : null,
+        user.account.type === "establishment" ? user.account.crNumber : null,
+        id,
+      ],
+    );
+    await service.query(
+      `insert into public.establishment_members (account_id, user_id, member_role)
+       values ($1, $2, 'owner')`,
+      [account.id, id],
+    );
   }
 
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({ role: user.role, city: user.city })
-    .eq("id", id);
-  if (profileError) throw profileError;
+  await service.query("update public.profiles set role = $2, city = $3 where id = $1", [
+    id,
+    user.role,
+    user.city,
+  ]);
 
   if (user.provider) await seedProvider(id, user.provider);
 
@@ -245,133 +234,111 @@ const DOC_TYPES = [
 ] as const;
 
 async function seedProvider(profileId: string, p: SeedProvider) {
-  const { data: provider, error } = await supabase
-    .from("providers")
-    .insert({
-      profile_id: profileId,
-      office_name: p.officeName,
-      cr_number: p.crNumber,
-      municipal_license_number: p.municipalLicenseNumber,
-      cities: p.cities,
-      bio: p.bio,
-    })
-    .select("id")
-    .single();
-  if (error) throw error;
+  // المزوّد نفسه يرفع مستنداته (يمر بسياسات storage.objects كما في المنصة)
+  const asProvider = dbFor(asUser(profileId));
+  const provider = await asProvider.one<{ id: string }>(
+    `insert into public.providers
+       (profile_id, office_name, cr_number, municipal_license_number, cities, bio)
+     values ($1, $2, $3, $4, $5, $6) returning id`,
+    [profileId, p.officeName, p.crNumber, p.municipalLicenseNumber, p.cities, p.bio],
+  );
 
   for (const docType of DOC_TYPES) {
     const path = `${provider.id}/${docType}-seed.pdf`;
-    const { error: uploadError } = await supabase.storage
-      .from("provider-documents")
-      .upload(path, samplePdf(`SEED ${docType}`), { contentType: "application/pdf", upsert: true });
-    if (uploadError) throw uploadError;
-    const { error: docError } = await supabase.from("provider_documents").insert({
-      provider_id: provider.id,
-      doc_type: docType,
-      storage_path: path,
-      file_name: `${docType}.pdf`,
-      mime_type: "application/pdf",
-      size_bytes: 400,
-    });
-    if (docError) throw docError;
+    const { error } = await uploadObject(
+      asProvider,
+      "provider-documents",
+      path,
+      samplePdf(`SEED ${docType}`),
+    );
+    if (error) throw new Error(`upload ${docType}: ${error}`);
+    await asProvider.query(
+      `insert into public.provider_documents
+         (provider_id, doc_type, storage_path, file_name, mime_type, size_bytes)
+       values ($1, $2, $3, $4, 'application/pdf', 400)`,
+      [provider.id, docType, path, `${docType}.pdf`],
+    );
   }
 
-  const { data: types, error: typesError } = await supabase
-    .from("service_types")
-    .select("id, slug")
-    .in(
-      "slug",
-      p.services.map((s) => s.slug),
+  for (const s of p.services) {
+    await asProvider.query(
+      `insert into public.provider_services
+         (provider_id, service_type_id, fee_halalas, duration_days, notes)
+       select $1, t.id, $3, $4, $5 from public.service_types t where t.slug = $2`,
+      [provider.id, s.slug, s.feeHalalas, s.durationDays, s.notes ?? null],
     );
-  if (typesError) throw typesError;
-  const idBySlug = new Map(types.map((t) => [t.slug, t.id]));
+  }
 
-  const { error: servicesError } = await supabase.from("provider_services").insert(
-    p.services.map((s) => ({
-      provider_id: provider.id,
-      service_type_id: idBySlug.get(s.slug)!,
-      fee_halalas: s.feeHalalas,
-      duration_days: s.durationDays,
-      notes: s.notes ?? null,
-    })),
+  await service.query(
+    p.status === "approved"
+      ? `update public.providers
+         set verification_status = 'approved', submitted_at = now(), reviewed_at = now()
+         where id = $1`
+      : "update public.providers set submitted_at = now() where id = $1",
+    [provider.id],
   );
-  if (servicesError) throw servicesError;
+}
 
-  const now = new Date().toISOString();
-  const { error: statusError } = await supabase
-    .from("providers")
-    .update(
-      p.status === "approved"
-        ? { verification_status: "approved", submitted_at: now, reviewed_at: now }
-        : { submitted_at: now },
-    )
-    .eq("id", provider.id);
-  if (statusError) throw statusError;
+/** جلسة بحساب seed (تتحقق من كلمة المرور ثم تعمل بهويته فتمر بنفس RLS) */
+async function signedIn(identifier: { email: string } | { phone: string }) {
+  const id = await verifyCredentials(
+    "email" in identifier
+      ? { kind: "email", email: identifier.email }
+      : { kind: "phone", phone: identifier.phone },
+    SEED_PASSWORD,
+    service,
+  );
+  if (!id) throw new Error(`تعذّر الدخول: ${JSON.stringify(identifier)}`);
+  return { id, db: dbFor(asUser(id)) };
+}
+
+function must<T>(result: RpcResult<T>): T {
+  if (result.error) throw new Error(result.error.message);
+  return result.data as T;
 }
 
 /** طلب عام تجريبي من حساب المنشأة مع عرض من المزوّد 1 (عبر دوال المنصة نفسها) */
 async function seedSampleRequest() {
-  const { count } = await supabase
-    .from("service_requests")
-    .select("id", { count: "exact", head: true });
+  const { count } = await service.one<{ count: number }>(
+    "select count(*) as count from public.service_requests where mode = 'public'",
+  );
   if (count) {
     console.log("• طلب تجريبي: موجود مسبقاً");
     return;
   }
 
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
-  const as = async (email: string) => {
-    const client = createClient<Database>(url!, publishableKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    const { error } = await client.auth.signInWithPassword({ email, password: SEED_PASSWORD });
-    if (error) throw error;
-    return client;
-  };
+  const requester = await signedIn({ email: "establishment@mueqeb.test" });
+  const account = await requester.db.one<{ id: string }>(
+    "select id from public.requester_accounts limit 1",
+  );
+  const type = await requester.db.one<{ id: string; required_docs: string[] }>(
+    "select id, required_docs from public.service_types where slug = 'qiwa_work_permit'",
+  );
+  const requestId = must(
+    await requester.db.rpc("create_service_request", {
+      p_requester_account_id: account.id,
+      p_service_type_id: type.id,
+      p_mode: "public",
+      p_city: "الرياض",
+      p_urgency: "urgent",
+      p_description: "إصدار رخص عمل لثلاثة عمال جدد في مؤسسة مقاولات.",
+      p_available_docs: type.required_docs.slice(0, 1),
+      p_private_notes: "التواصل مع مدير الموارد البشرية بعد الترسية.",
+    }),
+  );
 
-  const requester = await as("establishment@mueqeb.test");
-  const { data: account } = await requester.from("requester_accounts").select("id").single();
-  const { data: type } = await requester
-    .from("service_types")
-    .select("id, required_docs")
-    .eq("slug", "qiwa_work_permit")
-    .single();
-  const { data: requestId, error } = await requester.rpc("create_service_request", {
-    p_requester_account_id: account!.id,
-    p_service_type_id: type!.id,
-    p_mode: "public",
-    p_city: "الرياض",
-    p_urgency: "urgent",
-    p_description: "إصدار رخص عمل لثلاثة عمال جدد في مؤسسة مقاولات.",
-    p_available_docs: type!.required_docs.slice(0, 1),
-    p_private_notes: "التواصل مع مدير الموارد البشرية بعد الترسية.",
-  });
-  if (error) throw error;
-
-  const provider = await as("provider1@mueqeb.test");
-  const { error: bidError } = await provider.rpc("submit_bid", {
-    p_request_id: requestId,
-    p_fee_halalas: 45000,
-    p_expected_gov_fees_halalas: 0,
-    p_duration_days: 3,
-    p_includes: "إصدار الرخص الثلاث ومتابعتها حتى التفعيل.",
-    p_needs_from_client: "تفويض المكتب في قوى وصور إقامات العمال.",
-  });
-  if (bidError) throw bidError;
+  const provider = await signedIn({ email: "provider1@mueqeb.test" });
+  must(
+    await provider.db.rpc("submit_bid", {
+      p_request_id: requestId,
+      p_fee_halalas: 45000,
+      p_expected_gov_fees_halalas: 0,
+      p_duration_days: 3,
+      p_includes: "إصدار الرخص الثلاث ومتابعتها حتى التفعيل.",
+      p_needs_from_client: "تفويض المكتب في قوى وصور إقامات العمال.",
+    }),
+  );
   console.log("✓ طلب تجريبي: طلب عام مفتوح (رخص عمل، الرياض) مع عرض من المزوّد 1");
-}
-
-/** عميل مسجّل الدخول بحساب seed (يمر بنفس صلاحيات المنصة وRLS) */
-async function signedIn(identifier: { email: string } | { phone: string }) {
-  const client = createClient<Database>(url!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { error } = await client.auth.signInWithPassword({
-    ...identifier,
-    password: SEED_PASSWORD,
-  });
-  if (error) throw error;
-  return client;
 }
 
 /**
@@ -387,92 +354,101 @@ async function seedCompletedOrder(opts: {
 }) {
   const requester = await signedIn(opts.requester);
   const provider = await signedIn({ email: opts.providerEmail });
-  const { data: account } = await requester.from("requester_accounts").select("id").single();
-  const { data: type } = await requester
-    .from("service_types")
-    .select("id")
-    .eq("slug", opts.serviceSlug)
-    .single();
-  const { data: providerRow } = await supabase
-    .from("providers")
-    .select("id, cities, profile_id")
-    .eq("profile_id", (await provider.auth.getUser()).data.user!.id)
-    .single();
+  const account = await requester.db.one<{ id: string }>(
+    "select id from public.requester_accounts limit 1",
+  );
+  const type = await requester.db.one<{ id: string }>(
+    "select id from public.service_types where slug = $1",
+    [opts.serviceSlug],
+  );
+  const providerRow = await service.one<{ id: string; cities: string[] }>(
+    "select id, cities from public.providers where profile_id = $1",
+    [provider.id],
+  );
 
-  const { data: requestId, error } = await requester.rpc("create_service_request", {
-    p_requester_account_id: account!.id,
-    p_service_type_id: type!.id,
-    p_mode: "direct_listed",
-    p_target_provider_id: providerRow!.id,
-    p_city: providerRow!.cities[0],
-  });
-  if (error) throw error;
+  const requestId = must(
+    await requester.db.rpc("create_service_request", {
+      p_requester_account_id: account.id,
+      p_service_type_id: type.id,
+      p_mode: "direct_listed",
+      p_target_provider_id: providerRow.id,
+      p_city: providerRow.cities[0],
+    }),
+  );
 
-  const { data: order } = await supabase
-    .from("orders")
-    .select("id, total_paid_halalas")
-    .eq("request_id", requestId!)
-    .single();
+  const order = await service.one<{ id: string; total_paid_halalas: number }>(
+    "select id, total_paid_halalas from public.orders where request_id = $1",
+    [requestId],
+  );
   const ref = `mock_pay_seed_${requestId}`;
-  await supabase.rpc("register_payment_attempt", {
-    p_order_id: order!.id,
-    p_gateway: "mock",
-    p_provider_ref: ref,
-    p_amount_halalas: order!.total_paid_halalas,
-  });
-  await supabase.rpc("record_payment_result", {
-    p_gateway: "mock",
-    p_event_id: `evt_seed_${requestId}`,
-    p_provider_ref: ref,
-    p_status: "paid",
-    p_amount_halalas: order!.total_paid_halalas,
-    p_currency: "SAR",
-    p_gateway_payment_id: ref,
-    p_raw: { seed: true },
-  });
+  must(
+    await service.rpc("register_payment_attempt", {
+      p_order_id: order.id,
+      p_gateway: "mock",
+      p_provider_ref: ref,
+      p_amount_halalas: order.total_paid_halalas,
+    }),
+  );
+  must(
+    await service.rpc("record_payment_result", {
+      p_gateway: "mock",
+      p_event_id: `evt_seed_${requestId}`,
+      p_provider_ref: ref,
+      p_status: "paid",
+      p_amount_halalas: order.total_paid_halalas,
+      p_currency: "SAR",
+      p_gateway_payment_id: ref,
+      p_raw: { seed: true },
+    }),
+  );
 
-  await requester.rpc("confirm_delegation", { p_request_id: requestId! });
-  const step = await provider.rpc("start_execution", { p_request_id: requestId! });
-  if (step.error) throw step.error;
+  must(await requester.db.rpc("confirm_delegation", { p_request_id: requestId }));
+  must(await provider.db.rpc("start_execution", { p_request_id: requestId }));
   const path = `${requestId}/delivery_proof/seed.pdf`;
-  await provider.storage.from("request-documents").upload(path, samplePdf("SEED delivery proof"), {
-    contentType: "application/pdf",
-  });
-  await provider.from("request_documents").insert({
-    request_id: requestId!,
-    kind: "delivery_proof",
-    label: "إثبات الإنجاز",
-    storage_path: path,
-    file_name: "proof.pdf",
-    mime_type: "application/pdf",
-    size_bytes: 400,
-    uploaded_by: providerRow!.profile_id,
-  });
-  const delivered = await provider.rpc("submit_delivery", {
-    p_request_id: requestId!,
-    p_note: "أُنجزت الخدمة وأُرفق الإثبات",
-  });
-  if (delivered.error) throw delivered.error;
-  const completed = await requester.rpc("confirm_completion", { p_request_id: requestId! });
-  if (completed.error) throw completed.error;
+  const upload = await uploadObject(
+    provider.db,
+    "request-documents",
+    path,
+    samplePdf("SEED delivery proof"),
+  );
+  if (upload.error) throw new Error(`upload proof: ${upload.error}`);
+  await provider.db.query(
+    `insert into public.request_documents
+       (request_id, kind, label, storage_path, file_name, mime_type, size_bytes, uploaded_by)
+     values ($1, 'delivery_proof', 'إثبات الإنجاز', $2, 'proof.pdf', 'application/pdf', 400, $3)`,
+    [requestId, path, provider.id],
+  );
+  must(
+    await provider.db.rpc("submit_delivery", {
+      p_request_id: requestId,
+      p_note: "أُنجزت الخدمة وأُرفق الإثبات",
+    }),
+  );
+  must(await requester.db.rpc("confirm_completion", { p_request_id: requestId }));
 
   const [speed, accuracy, communication] = opts.scores;
-  await requester.rpc("submit_review", {
-    p_request_id: requestId!,
-    p_speed: speed,
-    p_accuracy: accuracy,
-    p_communication: communication,
-    p_comment: opts.comment,
-  });
-  await provider.rpc("submit_review", {
-    p_request_id: requestId!,
-    p_request_clarity: 5,
-    p_documents_speed: 4,
-  });
+  must(
+    await requester.db.rpc("submit_review", {
+      p_request_id: requestId,
+      p_speed: speed,
+      p_accuracy: accuracy,
+      p_communication: communication,
+      p_comment: opts.comment,
+    }),
+  );
+  must(
+    await provider.db.rpc("submit_review", {
+      p_request_id: requestId,
+      p_request_clarity: 5,
+      p_documents_speed: 4,
+    }),
+  );
 }
 
 async function seedCompletedOrders() {
-  const { count } = await supabase.from("reviews").select("id", { count: "exact", head: true });
+  const { count } = await service.one<{ count: number }>(
+    "select count(*) as count from public.reviews",
+  );
   if (count) {
     console.log("• طلبات مكتملة وتقييمات: موجودة مسبقاً");
     return;
@@ -507,10 +483,16 @@ async function main() {
   }
   await seedSampleRequest();
   await seedCompletedOrders();
-  console.log(`\nكلمة المرور لكل الحسابات: ${SEED_PASSWORD}`);
+  console.log(
+    process.env.SEED_PASSWORD
+      ? "\nكلمة المرور لكل الحسابات: SEED_PASSWORD"
+      : `\nكلمة المرور لكل الحسابات: ${SEED_PASSWORD}`,
+  );
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => closePools());

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { fieldErrors } from "@/lib/auth/validation";
 import { formatHalalas } from "@/lib/money";
 import { rpcErrorMessage } from "@/lib/requests/constants";
@@ -22,20 +22,21 @@ export async function submitBid(_prev: FormState, formData: FormData): Promise<F
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
   const input = parsed.data;
-  const supabase = await createClient();
+  const db = await getDb();
 
   // رسالة أوضح للحد الأدنى قبل الوصول للقاعدة (القاعدة تتحقق أيضاً)
-  const { data: request } = await supabase
-    .from("service_requests")
-    .select("service_types(min_fee_halalas)")
-    .eq("id", input.requestId)
-    .maybeSingle();
-  const minFee = request?.service_types?.min_fee_halalas;
+  const request = await db.maybeOne<{ min_fee_halalas: number }>(
+    `select t.min_fee_halalas
+     from public.service_requests r join public.service_types t on t.id = r.service_type_id
+     where r.id = $1`,
+    [input.requestId],
+  );
+  const minFee = request?.min_fee_halalas;
   if (minFee && input.fee < minFee) {
     return { errors: { fee: `الحد الأدنى لأتعاب هذه الخدمة ${formatHalalas(minFee)}` } };
   }
 
-  const { error } = await supabase.rpc("submit_bid", {
+  const { error } = await db.rpc("submit_bid", {
     p_request_id: input.requestId,
     p_fee_halalas: input.fee,
     p_expected_gov_fees_halalas: input.govFees,
@@ -52,8 +53,8 @@ export async function submitBid(_prev: FormState, formData: FormData): Promise<F
 
 export async function withdrawBid(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("provider");
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("withdraw_bid", {
+  const db = await getDb();
+  const { error } = await db.rpc("withdraw_bid", {
     p_bid_id: String(formData.get("bidId") ?? ""),
   });
   if (error) return { message: rpcErrorMessage(error) };

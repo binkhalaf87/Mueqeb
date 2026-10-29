@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { formatDateTime } from "@/lib/format";
 import { Rating } from "@/components/rating";
 import { Card } from "@/components/ui";
@@ -15,24 +16,29 @@ export async function ReviewsSection({
   requestId: string;
   role: "requester" | "provider";
 }) {
-  const supabase = await createClient();
-  const { data: request } = await supabase
-    .from("service_requests")
-    .select("status, orders(payment_status, settlement)")
-    .eq("id", requestId)
-    .single();
+  const db = await getDb();
+  const request = await db.maybeOne<{
+    status: string;
+    payment_status: string | null;
+    settlement: string | null;
+  }>(
+    `select r.status, o.payment_status, o.settlement
+     from public.service_requests r left join public.orders o on o.request_id = r.id
+     where r.id = $1`,
+    [requestId],
+  );
   const reviewable =
     request?.status === "completed" &&
-    request.orders?.payment_status === "paid" &&
-    request.orders.settlement === "completed";
+    request.payment_status === "paid" &&
+    request.settlement === "completed";
   if (!reviewable) return null;
 
-  const [{ data: reviews }, { data: revealed }] = await Promise.all([
-    supabase.from("reviews").select("*").eq("request_id", requestId),
-    supabase.rpc("reviews_revealed", { p_request_id: requestId }),
+  const [reviews, { data: revealed }] = await Promise.all([
+    db.query<Tables<"reviews">>("select * from public.reviews where request_id = $1", [requestId]),
+    db.rpc("reviews_revealed", { p_request_id: requestId }),
   ]);
-  const mine = reviews?.find((r) => r.reviewer_role === role);
-  const theirs = reviews?.find((r) => r.reviewer_role !== role);
+  const mine = reviews.find((r) => r.reviewer_role === role);
+  const theirs = reviews.find((r) => r.reviewer_role !== role);
 
   return (
     <Card className="space-y-4" data-testid="reviews-section">

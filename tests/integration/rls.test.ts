@@ -1,52 +1,25 @@
 /**
- * اختبارات سياسات RLS والدوال على Supabase المحلي.
- * تتطلب: npm run db:start && npm run seed، وملف .env.local.
- * تُتخطى تلقائياً إن لم يكن Supabase متاحاً.
+ * اختبارات سياسات RLS والدوال على Postgres المحلي.
+ * تتطلب: npm run db:reset && npm run seed، وملف .env.local.
+ * تُتخطى تلقائياً إن لم تكن قاعدة البيانات متاحة.
  */
 import { randomUUID } from "node:crypto";
-import { config } from "dotenv";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "@/lib/supabase/database.types";
+import {
+  anonClient,
+  databaseAvailable,
+  PASSWORD,
+  serviceClient,
+  signIn,
+  type Client,
+} from "./helpers";
 
-config({ path: ".env.local", quiet: true });
+const available = await databaseAvailable();
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
-const secretKey = process.env.SUPABASE_SECRET_KEY ?? "";
-const PASSWORD = "Mueqeb#2026";
+const signedIn = (email: string) => signIn({ email });
 
-async function supabaseAvailable() {
-  if (!url || !publishableKey || !secretKey) return false;
-  try {
-    const res = await fetch(`${url}/auth/v1/health`, { headers: { apikey: publishableKey } });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-const available = await supabaseAvailable();
-
-type Client = SupabaseClient<Database>;
-
-function anonClient(): Client {
-  return createClient<Database>(url, publishableKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-async function signedIn(email: string): Promise<Client> {
-  const client = anonClient();
-  const { error } = await client.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error) throw error;
-  return client;
-}
-
-describe.skipIf(!available)("RLS & onboarding (local Supabase)", () => {
-  const admin = createClient<Database>(url, secretKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+describe.skipIf(!available)("RLS & onboarding (local Postgres)", () => {
+  const admin = serviceClient();
   const createdUserIds: string[] = [];
 
   async function freshUser(): Promise<{ id: string; client: Client }> {
@@ -54,10 +27,9 @@ describe.skipIf(!available)("RLS & onboarding (local Supabase)", () => {
     const { data, error } = await admin.auth.admin.createUser({
       email,
       password: PASSWORD,
-      email_confirm: true,
       user_metadata: { full_name: "مستخدم اختبار" },
     });
-    if (error) throw error;
+    if (error || !data.user) throw new Error(error?.message ?? "createUser failed");
     createdUserIds.push(data.user.id);
     return { id: data.user.id, client: await signedIn(email) };
   }
@@ -175,15 +147,19 @@ describe.skipIf(!available)("RLS & onboarding (local Supabase)", () => {
     });
     expect(error).toBeNull();
 
-    const { data } = await client
+    // العضوية والحساب كلاهما مقروءان للمستخدم نفسه (RLS)
+    const { data: membership } = await client
       .from("establishment_members")
-      .select("member_role, requester_accounts(account_type, cr_number)")
+      .select("member_role, account_id")
       .eq("user_id", id)
       .single();
-    expect(data).toEqual({
-      member_role: "owner",
-      requester_accounts: { account_type: "establishment", cr_number: crNumber },
-    });
+    expect(membership?.member_role).toBe("owner");
+    const { data: account } = await client
+      .from("requester_accounts")
+      .select("account_type, cr_number")
+      .eq("id", membership!.account_id)
+      .single();
+    expect(account).toEqual({ account_type: "establishment", cr_number: crNumber });
   });
 
   it("users cannot insert accounts or memberships directly", async () => {

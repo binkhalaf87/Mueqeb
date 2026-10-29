@@ -1,5 +1,5 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 
 export type AdminKpis = {
   requests_published: number;
@@ -18,8 +18,8 @@ export type AdminKpis = {
 
 /** مؤشرات اللوحة — الأرقام المالية محسوبة في قاعدة البيانات من قيود الدفتر مباشرة */
 export async function getAdminKpis(): Promise<AdminKpis> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_kpis");
+  const db = await getDb();
+  const { data, error } = await db.rpc("admin_kpis");
   if (error) throw error;
   return data as unknown as AdminKpis;
 }

@@ -1,8 +1,10 @@
 import "server-only";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getDb, getSessionUserId } from "@/lib/db/server";
 import { homePathForRole, type Role } from "@/lib/auth/routes";
+import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, signSession } from "@/lib/auth/token";
 
 export type CurrentUser = {
   id: string;
@@ -17,36 +19,34 @@ export type CurrentUser = {
 
 /** المستخدم الحالي مع ملفه، أو null. مُخزّن لكل طلب. */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  // حساب أوقفته الإدارة: Auth يرفض getUser، لكن الجلسة القائمة ما زالت صالحة التوقيع.
-  // نأخذ الهوية من الـ claims الموثّقة ونعامله كموقوف، فيُوجَّه لصفحة الإيقاف بدل حلقة إعادة توجيه.
-  let id = user?.id;
-  const banned = !user && error?.code === "user_banned";
-  if (banned) {
-    const { data } = await supabase.auth.getClaims();
-    id = data?.claims?.sub;
-  }
+  const id = await getSessionUserId();
   if (!id) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, full_name, phone, suspended_at, suspension_reason")
-    .eq("id", id)
-    .single();
+  const db = await getDb();
+  const profile = await db.maybeOne<{
+    role: Role | null;
+    full_name: string;
+    phone: string | null;
+    email: string | null;
+    suspended_at: string | null;
+    suspension_reason: string | null;
+  }>(
+    `select p.role, p.full_name, p.phone, public.current_user_email() as email,
+            p.suspended_at, p.suspension_reason
+     from public.profiles p where p.id = $1`,
+    [id],
+  );
+  // حساب حُذف بعد إصدار الجلسة
+  if (!profile) return null;
 
   return {
     id,
-    role: profile?.role ?? null,
-    fullName: profile?.full_name ?? "",
-    email: user?.email ?? null,
-    phone: profile?.phone ?? user?.phone ?? null,
-    suspended: banned || Boolean(profile?.suspended_at),
-    suspensionReason: profile?.suspension_reason ?? null,
+    role: profile.role,
+    fullName: profile.full_name,
+    email: profile.email,
+    phone: profile.phone,
+    suspended: Boolean(profile.suspended_at),
+    suspensionReason: profile.suspension_reason,
   };
 });
 
@@ -65,4 +65,21 @@ export async function requireUser(): Promise<CurrentUser> {
   if (!user) redirect("/login");
   if (user.suspended) redirect("/suspended");
   return user;
+}
+
+/** يبدأ جلسة للمستخدم (بعد التسجيل أو الدخول) */
+export async function startSession(userId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, await signSession(userId), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  });
+}
+
+export async function endSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE);
 }

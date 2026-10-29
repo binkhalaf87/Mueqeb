@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { formatHalalas } from "@/lib/money";
 import { formatDateTime, formatDuration, timeLeft } from "@/lib/format";
 import {
@@ -30,31 +31,66 @@ export default async function RequesterRequestPage({
   const user = await requireRole("requester");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
-  const supabase = await createClient();
+  const db = await getDb();
 
-  const { data: request } = await supabase
-    .from("service_requests")
-    .select(
-      "*, service_types(name_ar, guide_min_halalas, guide_max_halalas), request_private_details(*)",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const request = await db.maybeOne<
+    Tables<"service_requests"> & {
+      service_types: Pick<
+        Tables<"service_types">,
+        "name_ar" | "guide_min_halalas" | "guide_max_halalas"
+      > | null;
+      request_private_details: Tables<"request_private_details"> | null;
+    }
+  >(
+    `select r.*,
+            case when t.id is null then null else json_build_object(
+              'name_ar', t.name_ar, 'guide_min_halalas', t.guide_min_halalas,
+              'guide_max_halalas', t.guide_max_halalas
+            ) end as service_types,
+            to_json(d) as request_private_details
+     from public.service_requests r
+     left join public.service_types t on t.id = r.service_type_id
+     left join public.request_private_details d on d.request_id = r.id
+     where r.id = $1`,
+    [id],
+  );
   if (!request) notFound();
 
-  const [{ data: bids }, { data: order }, { data: events }] = await Promise.all([
-    supabase.rpc("request_bids", { p_request_id: id }),
-    supabase
-      .from("orders")
-      .select(
-        "id, total_paid_halalas, payment_status, paid_at, refunded_at, refunded_halalas, settled_at, payments(status, failure_reason, created_at)",
-      )
-      .eq("request_id", id)
-      .maybeSingle(),
-    supabase
-      .from("order_events")
-      .select("id, from_status, to_status, actor_role, note, created_at")
-      .eq("request_id", id)
-      .order("created_at"),
+  const [{ data: bids }, order, events] = await Promise.all([
+    db.rpc("request_bids", { p_request_id: id }),
+    db.maybeOne<
+      Pick<
+        Tables<"orders">,
+        | "id"
+        | "total_paid_halalas"
+        | "payment_status"
+        | "paid_at"
+        | "refunded_at"
+        | "refunded_halalas"
+        | "settled_at"
+      > & {
+        payments: Pick<Tables<"payments">, "status" | "failure_reason" | "created_at">[];
+      }
+    >(
+      `select o.id, o.total_paid_halalas, o.payment_status, o.paid_at, o.refunded_at,
+              o.refunded_halalas, o.settled_at,
+              coalesce((select json_agg(json_build_object(
+                         'status', p.status, 'failure_reason', p.failure_reason,
+                         'created_at', p.created_at))
+                        from public.payments p where p.order_id = o.id), '[]') as payments
+       from public.orders o where o.request_id = $1`,
+      [id],
+    ),
+    db.query<
+      Pick<
+        Tables<"order_events">,
+        "id" | "from_status" | "to_status" | "actor_role" | "note" | "created_at"
+      >
+    >(
+      `select id, from_status, to_status, actor_role, note, created_at
+       from public.order_events where request_id = $1 order by created_at`,
+      [id],
+    ),
   ]);
 
   const open = request.status === "open";
@@ -72,7 +108,7 @@ export default async function RequesterRequestPage({
   const paid = order?.payment_status === "paid";
   const inProgress = request.status === "in_progress";
   const { data: cancelRefund } = inProgress
-    ? await supabase.rpc("cancellation_after_start_refund", { p_request_id: id })
+    ? await db.rpc("cancellation_after_start_refund", { p_request_id: id })
     : { data: null };
   const lastAttempt = [...(order?.payments ?? [])].sort((a, b) =>
     b.created_at.localeCompare(a.created_at),

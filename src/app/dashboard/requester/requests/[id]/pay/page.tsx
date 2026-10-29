@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { formatHalalas } from "@/lib/money";
 import { getPaymentProvider } from "@/lib/payments";
 import { Card, PageTitle } from "@/components/ui";
@@ -19,20 +20,24 @@ export default async function PayPage({
   const { id } = await params;
   if (!UUID.test(id)) notFound();
 
-  const supabase = await createClient();
-  const { data: order } = await supabase
-    .from("orders")
-    .select("*, service_requests(status, city, service_types(name_ar)), bids(duration_days)")
-    .eq("request_id", id)
-    .maybeSingle();
+  const db = await getDb();
+  const order = await db.maybeOne<
+    Tables<"orders"> & { request_status: string; service_name: string | null }
+  >(
+    `select o.*, r.status as request_status, t.name_ar as service_name
+     from public.orders o
+     join public.service_requests r on r.id = o.request_id
+     left join public.service_types t on t.id = r.service_type_id
+     where o.request_id = $1`,
+    [id],
+  );
   if (!order) notFound();
-  if (order.payment_status !== "unpaid" || order.service_requests?.status !== "awarded_unpaid") {
+  if (order.payment_status !== "unpaid" || order.request_status !== "awarded_unpaid") {
     redirect(`/dashboard/requester/requests/${id}`);
   }
 
-  const { data: office } = await supabase
-    .rpc("public_provider", { p_provider_id: order.provider_id })
-    .maybeSingle();
+  const { data: offices } = await db.rpc("public_provider", { p_provider_id: order.provider_id });
+  const office = offices?.[0];
   const pct = (bps: number) => `${bps / 100}%`;
   const gateway = getPaymentProvider().name;
 
@@ -44,11 +49,7 @@ export default async function PayPage({
       >
         → الطلب
       </Link>
-      <PageTitle
-        subtitle={`${order.service_requests?.service_types?.name_ar} · ${office?.office_name ?? ""}`}
-      >
-        الدفع
-      </PageTitle>
+      <PageTitle subtitle={`${order.service_name} · ${office?.office_name ?? ""}`}>الدفع</PageTitle>
 
       <Card className="space-y-4" data-testid="payment-summary">
         <dl className="space-y-3">

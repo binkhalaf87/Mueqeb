@@ -1,4 +1,4 @@
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database } from "@/lib/db/types";
 
 export type RequestStatus = Database["public"]["Enums"]["request_status"];
 export type RequestMode = Database["public"]["Enums"]["request_mode"];

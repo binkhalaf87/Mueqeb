@@ -1,22 +1,21 @@
 /**
- * الطلبات المالية والمدفوعات ودفتر الحسابات على Supabase المحلي.
+ * الطلبات المالية والمدفوعات ودفتر الحسابات على Postgres المحلي.
  * يستخدم اتصال Postgres مباشراً (كمالك القاعدة) لإثبات أن الدفتر لا يُعدّل حتى بأعلى صلاحية.
  */
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { calcOrderAmounts } from "@/lib/payments/amounts";
-import { createTestUser, serviceClient, supabaseAvailable, type Client } from "./helpers";
+import { createTestUser, serviceClient, databaseAvailable, type Client } from "./helpers";
 
-const available = await supabaseAvailable();
-const DB_URL =
-  process.env.SUPABASE_DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+const available = await databaseAvailable();
+const DB_URL = process.env.DATABASE_URL ?? "";
 
 function randomCr() {
   return String(Math.floor(1e9 + Math.random() * 9e9));
 }
 
-describe.skipIf(!available)("orders, payments & append-only ledger (local Supabase)", () => {
+describe.skipIf(!available)("orders, payments & append-only ledger (local Postgres)", () => {
   const admin = serviceClient();
   const db = new pg.Client({ connectionString: DB_URL });
   const created: string[] = [];

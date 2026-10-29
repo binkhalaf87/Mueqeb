@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { getMyProvider } from "@/lib/providers/queries";
 import { providerStage } from "@/lib/providers/constants";
 import { getProviderStats } from "@/lib/providers/stats";
@@ -13,26 +13,21 @@ export const metadata: Metadata = { title: "لوحة المزوّد" };
 export default async function ProviderDashboard() {
   const user = await requireRole("provider");
   const provider = await getMyProvider(user.id);
-  const supabase = await createClient();
+  const db = await getDb();
 
-  const [docs, services] = provider
-    ? await Promise.all([
-        supabase
-          .from("provider_documents")
-          .select("id", { count: "exact", head: true })
-          .eq("provider_id", provider.id),
-        supabase
-          .from("provider_services")
-          .select("id", { count: "exact", head: true })
-          .eq("provider_id", provider.id)
-          .eq("active", true),
-      ])
-    : [null, null];
+  const counts = provider
+    ? await db.one<{ docs: number; services: number }>(
+        `select
+           (select count(*) from public.provider_documents where provider_id = $1) as docs,
+           (select count(*) from public.provider_services where provider_id = $1 and active) as services`,
+        [provider.id],
+      )
+    : null;
 
   const stage = provider ? providerStage(provider) : "draft";
   const performance = provider ? (await getProviderStats([provider.id])).get(provider.id) : null;
-  const docsCount = docs?.count ?? 0;
-  const servicesCount = services?.count ?? 0;
+  const docsCount = counts?.docs ?? 0;
+  const servicesCount = counts?.services ?? 0;
 
   const steps = [
     { done: Boolean(provider), label: "بيانات المكتب والمدن", href: "/dashboard/provider/profile" },

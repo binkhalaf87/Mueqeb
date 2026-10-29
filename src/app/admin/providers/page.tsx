@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { providerStage, STAGE_LABEL, type ProviderStage } from "@/lib/providers/constants";
 import { ProviderStageBadge } from "@/components/provider-stage-badge";
 import { Card, PageTitle } from "@/components/ui";
@@ -15,13 +16,24 @@ export default async function AdminProvidersPage({ searchParams }: PageProps<"/a
   const { stage: stageParam } = await searchParams;
   const stage = TABS.find((t) => t === stageParam) ?? "under_review";
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("providers")
-    .select("id, office_name, cr_number, cities, verification_status, submitted_at, created_at")
-    .order("submitted_at", { ascending: true, nullsFirst: false });
+  const db = await getDb();
+  const data = await db.query<
+    Pick<
+      Tables<"providers">,
+      | "id"
+      | "office_name"
+      | "cr_number"
+      | "cities"
+      | "verification_status"
+      | "submitted_at"
+      | "created_at"
+    >
+  >(
+    `select id, office_name, cr_number, cities, verification_status, submitted_at, created_at
+     from public.providers order by submitted_at asc nulls last`,
+  );
 
-  const all = (data ?? []).map((p) => ({ ...p, stage: providerStage(p) }));
+  const all = data.map((p) => ({ ...p, stage: providerStage(p) }));
   const counts = new Map<ProviderStage, number>();
   for (const p of all) counts.set(p.stage, (counts.get(p.stage) ?? 0) + 1);
   const rows = all.filter((p) => p.stage === stage);

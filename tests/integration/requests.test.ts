@@ -1,5 +1,5 @@
 /**
- * الطلبات والعروض المغلقة وآلة الحالات على Supabase المحلي.
+ * الطلبات والعروض المغلقة وآلة الحالات على Postgres المحلي.
  * كل اختبار يستخدم مدينة فريدة حتى لا يتأثر بمزوّدي seed.
  */
 import { randomUUID } from "node:crypto";
@@ -8,17 +8,17 @@ import {
   anonClient,
   createTestUser,
   serviceClient,
-  supabaseAvailable,
+  databaseAvailable,
   type Client,
 } from "./helpers";
 
-const available = await supabaseAvailable();
+const available = await databaseAvailable();
 
 function randomCr() {
   return String(Math.floor(1e9 + Math.random() * 9e9));
 }
 
-describe.skipIf(!available)("requests, sealed bids & state machine (local Supabase)", () => {
+describe.skipIf(!available)("requests, sealed bids & state machine (local Postgres)", () => {
   const admin = serviceClient();
   const created: string[] = [];
   let serviceTypeId: string;

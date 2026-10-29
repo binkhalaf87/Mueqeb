@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getDb, serviceDb } from "@/lib/db/server";
+import { endSession, getCurrentUser, startSession } from "@/lib/auth/session";
+import { createAccount, verifyCredentials } from "@/lib/auth/accounts";
+import { clearLoginFailures, isLoginBlocked, recordLoginFailure } from "@/lib/auth/rate-limit";
 import { homePathForRole, safeNextPath } from "@/lib/auth/routes";
 import { fieldErrors, onboardingSchema, signInSchema, signUpSchema } from "@/lib/auth/validation";
 
@@ -18,12 +21,6 @@ function formValues(formData: FormData, keys: string[]) {
   return Object.fromEntries(keys.map((k) => [k, String(formData.get(k) ?? "")]));
 }
 
-function credentials(
-  identifier: { kind: "email"; email: string } | { kind: "phone"; phone: string },
-) {
-  return identifier.kind === "email" ? { email: identifier.email } : { phone: identifier.phone };
-}
-
 export async function signUp(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = signUpSchema.safeParse({
     fullName: formData.get("fullName"),
@@ -34,32 +31,15 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
   const { fullName, identifier, password } = parsed.data;
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
-    ...credentials(identifier),
-    password,
-    options: { data: { full_name: fullName } },
-  });
-
-  if (error) {
-    if (
-      error.code === "user_already_exists" ||
-      error.code === "phone_exists" ||
-      error.code === "email_exists"
-    ) {
+  const result = await createAccount(identifier, password, fullName);
+  if (!result.ok) {
+    if (result.reason === "exists") {
       return { message: "هذا الحساب مسجّل مسبقاً، سجّل الدخول بدلاً من ذلك.", values };
-    }
-    if (error.code === "weak_password") {
-      return { errors: { password: "كلمة المرور ضعيفة، اختر كلمة أقوى." }, values };
     }
     return { message: "تعذّر إنشاء الحساب، حاول مرة أخرى.", values };
   }
 
-  if (!data.session) {
-    // عند تفعيل تأكيد البريد/الجوال في Supabase
-    return { message: "أنشأنا حسابك. أكّد بريدك الإلكتروني أو جوالك ثم سجّل الدخول." };
-  }
-
+  await startSession(result.userId);
   revalidatePath("/", "layout");
   redirect("/onboarding");
 }
@@ -72,25 +52,38 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   const values = formValues(formData, ["identifier"]);
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    ...credentials(parsed.data.identifier),
-    password: parsed.data.password,
-  });
-  if (error) {
-    if (error.code === "user_banned") {
-      return { message: "هذا الحساب موقوف من الإدارة. تواصل مع الدعم.", values };
-    }
-    return { message: "بيانات الدخول غير صحيحة.", values };
+  const { identifier } = parsed.data;
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const limitKeys = [
+    `id:${identifier.kind === "email" ? identifier.email : identifier.phone}`,
+    `ip:${ip}`,
+  ];
+  if (isLoginBlocked(limitKeys)) {
+    return { message: "محاولات دخول كثيرة. انتظر 15 دقيقة ثم حاول مرة أخرى.", values };
   }
 
+  const userId = await verifyCredentials(identifier, parsed.data.password);
+  if (!userId) {
+    recordLoginFailure(limitKeys);
+    return { message: "بيانات الدخول غير صحيحة.", values };
+  }
+  clearLoginFailures(limitKeys);
+
+  const profile = await serviceDb().maybeOne<{ suspended_at: string | null }>(
+    "select suspended_at from public.profiles where id = $1",
+    [userId],
+  );
+  if (profile?.suspended_at) {
+    return { message: "هذا الحساب موقوف من الإدارة. تواصل مع الدعم.", values };
+  }
+
+  await startSession(userId);
   revalidatePath("/", "layout");
   redirect(safeNextPath(formData.get("next")) ?? "/dashboard");
 }
 
 export async function signOut() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  await endSession();
   revalidatePath("/", "layout");
   redirect("/");
 }
@@ -111,8 +104,8 @@ export async function completeOnboarding(_prev: FormState, formData: FormData): 
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
   const input = parsed.data;
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("complete_onboarding", {
+  const db = await getDb();
+  const { error } = await db.rpc("complete_onboarding", {
     p_role: input.role,
     p_account_type: input.role === "requester" ? input.accountType : undefined,
     p_establishment_name:

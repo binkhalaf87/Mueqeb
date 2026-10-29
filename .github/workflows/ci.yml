@@ -8,9 +8,25 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mueqeb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
-      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mueqeb
+      AUTH_SECRET: ci-only-auth-secret-0123456789abcdef0123456789
+      STORAGE_DIR: .data/storage
+      PAYMENT_PROVIDER: mock
+      MOCK_PAYMENT_WEBHOOK_SECRET: ci-mock-webhook-secret-0123456789
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,6 +37,8 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
-      # اختبارات التكامل مع Supabase تُتخطى تلقائياً هنا لعدم توفره
+      # قاعدة اختبار حقيقية: الـ migrations ثم البيانات التجريبية ثم اختبارات الوحدة والتكامل
+      - run: npm run db:migrate
+      - run: npm run seed
       - run: npm test
       - run: npm run build

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { fieldErrors } from "@/lib/auth/validation";
 import { reviewSchema } from "@/lib/providers/validation";
 import type { FormState } from "./auth";
@@ -23,8 +23,8 @@ export async function reviewProvider(_prev: FormState, formData: FormData): Prom
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
   const { providerId, action, reason } = parsed.data;
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("review_provider", {
+  const db = await getDb();
+  const { error } = await db.rpc("review_provider", {
     p_provider_id: providerId,
     p_action: action,
     p_reason: reason,

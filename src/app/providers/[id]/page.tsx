@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { formatHalalas } from "@/lib/money";
 import { formatDateTime, formatDuration } from "@/lib/format";
@@ -16,9 +16,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** يعيد المزوّد المعتمد فقط؛ غير المعتمد غير موجود بالنسبة للعامة */
 const getPublicProvider = cache(async (id: string) => {
   if (!UUID.test(id)) return null;
-  const supabase = await createClient();
-  const { data } = await supabase.rpc("public_provider", { p_provider_id: id }).maybeSingle();
-  return data;
+  const db = await getDb();
+  const { data } = await db.rpc("public_provider", { p_provider_id: id });
+  return data?.[0] ?? null;
 });
 
 export async function generateMetadata({
@@ -33,12 +33,12 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
   const provider = await getPublicProvider(id);
   if (!provider) notFound();
 
-  const supabase = await createClient();
+  const db = await getDb();
   const [{ data: services }, user, statsById, { data: reviews }] = await Promise.all([
-    supabase.rpc("public_provider_services", { p_provider_id: provider.id }),
+    db.rpc("public_provider_services", { p_provider_id: provider.id }),
     getCurrentUser(),
     getProviderStats([provider.id]),
-    supabase.rpc("provider_reviews", { p_provider_id: provider.id }),
+    db.rpc("provider_reviews", { p_provider_id: provider.id }),
   ]);
   const stats = statsById.get(provider.id);
   // أزرار الطلب لطالب الخدمة؛ والزائر يُدعى للدخول

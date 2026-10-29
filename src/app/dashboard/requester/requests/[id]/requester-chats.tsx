@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { getThreadMessages } from "@/lib/execution/queries";
 import { Chat } from "@/components/chat";
 
@@ -29,11 +29,9 @@ export async function RequesterChats({
     : bidders;
 
   if (threads.length === 0 && targetProviderId) {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .rpc("public_provider", { p_provider_id: targetProviderId })
-      .maybeSingle();
-    threads = [{ providerId: targetProviderId, officeName: data?.office_name ?? "المكتب" }];
+    const db = await getDb();
+    const { data } = await db.rpc("public_provider", { p_provider_id: targetProviderId });
+    threads = [{ providerId: targetProviderId, officeName: data?.[0]?.office_name ?? "المكتب" }];
   }
   if (threads.length === 0) return null;
 

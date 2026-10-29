@@ -1,19 +1,21 @@
 /**
- * سياسات المزوّدين والمستندات والكتالوج على Supabase المحلي.
- * تتطلب: npm run db:start && npm run seed. تُتخطى إن لم يكن Supabase متاحاً.
+ * سياسات المزوّدين والمستندات والكتالوج على Postgres المحلي.
+ * تتطلب: npm run db:reset && npm run seed. تُتخطى إن لم تكن قاعدة البيانات متاحة.
  */
 import { randomUUID } from "node:crypto";
+import { signSession, verifyFileToken } from "@/lib/auth/token";
+import { GET as downloadFile } from "@/app/api/files/[token]/route";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   anonClient,
   createTestUser,
   serviceClient,
   signIn,
-  supabaseAvailable,
+  databaseAvailable,
   type Client,
 } from "./helpers";
 
-const available = await supabaseAvailable();
+const available = await databaseAvailable();
 const BUCKET = "provider-documents";
 const DOC_TYPES = [
   "commercial_register",
@@ -26,7 +28,7 @@ function randomCr() {
   return String(Math.floor(1e9 + Math.random() * 9e9));
 }
 
-describe.skipIf(!available)("providers, documents & catalog (local Supabase)", () => {
+describe.skipIf(!available)("providers, documents & catalog (local Postgres)", () => {
   const admin = serviceClient();
   const created: string[] = [];
 
@@ -226,8 +228,16 @@ describe.skipIf(!available)("providers, documents & catalog (local Supabase)", (
         .from(BUCKET)
         .createSignedUrl(approvedDocPath, 60);
       expect(adminUrl?.signedUrl).toBeTruthy();
-      const res = await fetch(adminUrl!.signedUrl);
+      // مسار التنزيل نفسه: الرمز الصحيح يعيد الملف، والمعدَّل يُرفض
+      const token = adminUrl!.signedUrl.split("/").pop()!;
+      const download = (t: string) =>
+        downloadFile(new Request(`http://test/api/files/${t}`), {
+          params: Promise.resolve({ token: t }),
+        });
+      const res = await download(token);
       expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("application/pdf");
+      expect((await download(`${token}x`)).status).toBe(403);
     });
 
     it.each([
@@ -250,10 +260,26 @@ describe.skipIf(!available)("providers, documents & catalog (local Supabase)", (
       expect(file).toBeNull();
     });
 
-    it("the bucket is private (no public URL access)", async () => {
-      const { data } = anonClient().storage.from(BUCKET).getPublicUrl(approvedDocPath);
-      const res = await fetch(data.publicUrl);
-      expect(res.ok).toBe(false);
+    it("files have no public URL: only a valid, untampered signed token reaches them", async () => {
+      const { data: none } = await anonClient()
+        .storage.from(BUCKET)
+        .createSignedUrl(approvedDocPath, 60);
+      expect(none).toBeNull();
+
+      const { data: signed } = await admin.storage
+        .from(BUCKET)
+        .createSignedUrl(approvedDocPath, 60);
+      const token = signed!.signedUrl.split("/").pop()!;
+      expect(await verifyFileToken(token)).toEqual({ bucket: BUCKET, path: approvedDocPath });
+
+      // تغيير المسار داخل الرمز يُبطل التوقيع، ورمز الجلسة لا يصلح رابط ملف
+      const [body, sig] = token.split(".");
+      const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+      const forged = Buffer.from(JSON.stringify({ ...payload, path: "x/other.pdf" })).toString(
+        "base64url",
+      );
+      expect(await verifyFileToken(`${forged}.${sig}`)).toBeNull();
+      expect(await verifyFileToken(await signSession(randomUUID()))).toBeNull();
     });
 
     it("a provider cannot upload into another provider's folder", async () => {

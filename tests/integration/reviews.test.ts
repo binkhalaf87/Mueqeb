@@ -1,5 +1,5 @@
 /**
- * التقييم المتبادل والإحصاءات على Supabase المحلي.
+ * التقييم المتبادل والإحصاءات على Postgres المحلي.
  * معيار القبول: لا تقييم لطلب غير مكتمل، والتقييمات تظهر بالقاعدة المزدوجة.
  */
 import { randomUUID } from "node:crypto";
@@ -10,19 +10,18 @@ import {
   createTestUser,
   serviceClient,
   signIn,
-  supabaseAvailable,
+  databaseAvailable,
   type Client,
 } from "./helpers";
 
-const available = await supabaseAvailable();
-const DB_URL =
-  process.env.SUPABASE_DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+const available = await databaseAvailable();
+const DB_URL = process.env.DATABASE_URL ?? "";
 
 function randomCr() {
   return String(Math.floor(1e9 + Math.random() * 9e9));
 }
 
-describe.skipIf(!available)("mutual reviews & stats (local Supabase)", () => {
+describe.skipIf(!available)("mutual reviews & stats (local Postgres)", () => {
   const admin = serviceClient();
   const db = new pg.Client({ connectionString: DB_URL });
   const created: string[] = [];

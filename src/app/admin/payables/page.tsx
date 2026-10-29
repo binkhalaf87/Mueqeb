@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import { createSignedUrls } from "@/lib/storage";
 import { formatHalalas } from "@/lib/money";
 import { formatDateTime } from "@/lib/format";
 import { DOCUMENTS_BUCKET } from "@/lib/providers/constants";
@@ -11,29 +12,37 @@ export const metadata: Metadata = { title: "المستحقات" };
 
 export default async function PayablesPage() {
   await requireRole("admin");
-  const supabase = await createClient();
-  const [{ data: payables }, { data: payouts }, { data: ibanDocs }] = await Promise.all([
-    supabase.rpc("provider_payables"),
-    supabase
-      .from("provider_payouts")
-      .select("id, amount_halalas, bank_reference, note, created_at, providers(office_name)")
-      .order("created_at", { ascending: false })
-      .limit(50),
-    supabase
-      .from("provider_documents")
-      .select("provider_id, storage_path")
-      .eq("doc_type", "iban_certificate"),
+  const db = await getDb();
+  const [{ data: payables }, payouts, ibanDocs] = await Promise.all([
+    db.rpc("provider_payables"),
+    db.query<{
+      id: string;
+      amount_halalas: number;
+      bank_reference: string;
+      note: string | null;
+      created_at: string;
+      providers: { office_name: string } | null;
+    }>(
+      `select po.id, po.amount_halalas, po.bank_reference, po.note, po.created_at,
+              case when p.id is null then null else json_build_object('office_name', p.office_name)
+              end as providers
+       from public.provider_payouts po left join public.providers p on p.id = po.provider_id
+       order by po.created_at desc limit 50`,
+    ),
+    db.query<{ provider_id: string; storage_path: string }>(
+      `select provider_id, storage_path from public.provider_documents
+       where doc_type = 'iban_certificate'`,
+    ),
   ]);
 
   // روابط موقعة لشهادات الحساب البنكي (للتحويل)
-  const paths = (ibanDocs ?? []).map((d) => d.storage_path);
-  const { data: signed } = paths.length
-    ? await supabase.storage.from(DOCUMENTS_BUCKET).createSignedUrls(paths, 300)
-    : { data: [] };
-  const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
-  const ibanUrl = new Map(
-    (ibanDocs ?? []).map((d) => [d.provider_id, urlByPath.get(d.storage_path)]),
+  const urlByPath = await createSignedUrls(
+    db,
+    DOCUMENTS_BUCKET,
+    ibanDocs.map((d) => d.storage_path),
+    300,
   );
+  const ibanUrl = new Map(ibanDocs.map((d) => [d.provider_id, urlByPath.get(d.storage_path)]));
   const total = (payables ?? []).reduce((s, p) => s + Number(p.outstanding_halalas), 0);
 
   return (
@@ -110,7 +119,7 @@ export default async function PayablesPage() {
 
       <Card className="p-0">
         <h2 className="border-b border-border px-6 py-3 font-semibold">سجل الصرف</h2>
-        {!payouts?.length ? (
+        {!payouts.length ? (
           <p className="p-6 text-sm text-muted">لا توجد عمليات صرف.</p>
         ) : (
           <ul className="divide-y divide-border text-sm" data-testid="payouts-list">

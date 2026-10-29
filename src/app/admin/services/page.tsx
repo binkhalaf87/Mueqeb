@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { formatHalalas, halalasToInput } from "@/lib/money";
 import { DELEGATION_LABEL } from "@/lib/providers/constants";
 import { Badge, Card, PageTitle } from "@/components/ui";
@@ -10,21 +11,23 @@ export const metadata: Metadata = { title: "أنواع الخدمات" };
 
 export default async function ServicesAdminPage() {
   await requireRole("admin");
-  const supabase = await createClient();
-  const [{ data: categories }, { data: listed }] = await Promise.all([
-    supabase
-      .from("service_categories")
-      .select("id, name_ar, service_types(*)")
-      .order("sort_order")
-      .order("sort_order", { referencedTable: "service_types" }),
-    supabase.from("provider_services").select("service_type_id, fee_halalas, active"),
+  const db = await getDb();
+  const [categories, listed] = await Promise.all([
+    db.query<{ id: string; name_ar: string; service_types: Tables<"service_types">[] }>(
+      `select c.id, c.name_ar,
+              coalesce((select json_agg(t order by t.sort_order)
+                        from public.service_types t where t.category_id = c.id), '[]') as service_types
+       from public.service_categories c order by c.sort_order`,
+    ),
+    db.query<{ service_type_id: string; fee_halalas: number; active: boolean }>(
+      "select service_type_id, fee_halalas, active from public.provider_services",
+    ),
   ]);
 
   // خدمات مزوّدين معلنة بسعر أقل من الحد الأدنى الحالي (بعد رفعه)
   const belowMin = (typeId: string, min: number) =>
-    (listed ?? []).filter((l) => l.service_type_id === typeId && l.active && l.fee_halalas < min)
-      .length;
-  const categoryOptions = (categories ?? []).map((c) => ({ id: c.id, name: c.name_ar }));
+    listed.filter((l) => l.service_type_id === typeId && l.active && l.fee_halalas < min).length;
+  const categoryOptions = categories.map((c) => ({ id: c.id, name: c.name_ar }));
 
   return (
     <div className="space-y-6">
@@ -37,7 +40,7 @@ export default async function ServicesAdminPage() {
         <ServiceTypeForm categories={categoryOptions} />
       </Card>
 
-      {(categories ?? []).map((c) => (
+      {categories.map((c) => (
         <Card key={c.id} className="space-y-3 p-0">
           <h2 className="border-b border-border px-6 py-3 font-semibold">{c.name_ar}</h2>
           <ul className="divide-y divide-border" data-testid={`services-${c.id}`}>

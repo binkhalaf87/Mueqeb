@@ -1,38 +1,49 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import { createSignedUrls } from "@/lib/storage";
+import type { Tables } from "@/lib/db/types";
 
 export const REQUEST_DOCUMENTS_BUCKET = "request-documents";
 const SIGNED_URL_TTL_SECONDS = 300;
 
 /** مستندات الطلب بروابط موقعة مؤقتة — RLS يقصرها على العميل والمزوّد المُرسى عليه والإدارة */
 export async function getRequestDocuments(requestId: string) {
-  const supabase = await createClient();
-  const { data: docs } = await supabase
-    .from("request_documents")
-    .select("id, kind, label, storage_path, file_name, created_at")
-    .eq("request_id", requestId)
-    .order("created_at");
-  if (!docs?.length) return [];
-  const { data: signed } = await supabase.storage.from(REQUEST_DOCUMENTS_BUCKET).createSignedUrls(
+  const db = await getDb();
+  const docs = await db.query<
+    Pick<
+      Tables<"request_documents">,
+      "id" | "kind" | "label" | "storage_path" | "file_name" | "created_at"
+    >
+  >(
+    `select id, kind, label, storage_path, file_name, created_at
+     from public.request_documents where request_id = $1 order by created_at`,
+    [requestId],
+  );
+  if (!docs.length) return [];
+  const urls = await createSignedUrls(
+    db,
+    REQUEST_DOCUMENTS_BUCKET,
     docs.map((d) => d.storage_path),
     SIGNED_URL_TTL_SECONDS,
   );
-  const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
-  return docs.map((d) => ({ ...d, url: urlByPath.get(d.storage_path) ?? null }));
+  return docs.map((d) => ({ ...d, url: urls.get(d.storage_path) ?? null }));
 }
 
 export type RequestDocument = Awaited<ReturnType<typeof getRequestDocuments>>[number];
 
-/** رسائل خيط (طلب، مزوّد) — RLS يقصرها على أطراف الخيط */
-export async function getThreadMessages(requestId: string, providerId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("messages")
-    .select("id, sender_id, sender_role, body, was_masked, created_at")
-    .eq("request_id", requestId)
-    .eq("provider_id", providerId)
-    .order("id");
-  return data ?? [];
-}
+export type ChatMessage = Pick<
+  Tables<"messages">,
+  "id" | "sender_id" | "sender_role" | "body" | "was_masked" | "created_at"
+>;
 
-export type ChatMessage = Awaited<ReturnType<typeof getThreadMessages>>[number];
+/** رسائل خيط (طلب، مزوّد) بعد معرّف معيّن — RLS يقصرها على أطراف الخيط */
+export async function getThreadMessages(requestId: string, providerId: string, afterId = 0) {
+  const db = await getDb();
+  return db.query<ChatMessage>(
+    `select id, sender_id, sender_role, body, was_masked, created_at
+     from public.messages
+     where request_id = $1 and provider_id = $2 and id > $3
+     order by id`,
+    [requestId, providerId, afterId],
+  );
+}

@@ -1,7 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage, type SendMessageState } from "@/app/actions/execution";
 import type { ChatMessage } from "@/lib/execution/queries";
 import { Card } from "@/components/ui";
@@ -12,10 +11,13 @@ const ROLE_LABEL: Record<string, string> = {
   admin: "الإدارة",
 };
 
+/** فترة الاستطلاع أثناء ظهور الصفحة */
+const POLL_MS = 3000;
+
 /**
- * محادثة خيط (طلب، مزوّد) مع تحديث لحظي عبر Supabase Realtime.
- * الإرسال عبر Server Action تمر بفلتر قاعدة البيانات (حجب/رفض)، والاستقبال عبر Realtime
- * الذي يحترم RLS فلا تصل رسائل خيوط الآخرين.
+ * محادثة خيط (طلب، مزوّد) مع تحديث شبه لحظي بالاستطلاع الدوري من /api/messages.
+ * الإرسال عبر Server Action تمر بفلتر قاعدة البيانات (حجب/رفض)، والقراءة بهوية المستخدم
+ * فيقصرها RLS على أطراف الخيط فلا تصل رسائل خيوط الآخرين.
  */
 export function Chat({
   requestId,
@@ -37,67 +39,46 @@ export function Chat({
   const formRef = useRef<HTMLFormElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
 
-  // الاشتراك اللحظي
-  useEffect(() => {
-    const supabase = createClient();
-    let cancelled = false;
-    const channel = supabase.channel(`messages:${requestId}:${providerId}`);
+  const lastIdRef = useRef(initialMessages.at(-1)?.id ?? 0);
 
-    const append = (incoming: ChatMessage[]) =>
-      setMessages((current) => {
-        const known = new Set(current.map((m) => m.id));
-        const fresh = incoming.filter((m) => !known.has(m.id));
-        return fresh.length ? [...current, ...fresh].sort((a, b) => a.id - b.id) : current;
-      });
-
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) supabase.realtime.setAuth(data.session.access_token);
-      if (cancelled) return;
-      channel
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `request_id=eq.${requestId}`,
-          },
-          (payload) => {
-            const m = payload.new as ChatMessage & { provider_id: string };
-            if (m.provider_id === providerId) append([m]);
-          },
-        )
-        .subscribe();
-    })();
-
-    return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
-    };
+  const refresh = useCallback(async () => {
+    const params = new URLSearchParams({
+      request: requestId,
+      provider: providerId,
+      after: String(lastIdRef.current),
+    });
+    const response = await fetch(`/api/messages?${params}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const incoming = (await response.json()) as ChatMessage[];
+    if (!incoming.length) return;
+    lastIdRef.current = Math.max(lastIdRef.current, ...incoming.map((m) => m.id));
+    setMessages((current) => {
+      const known = new Set(current.map((m) => m.id));
+      const fresh = incoming.filter((m) => !known.has(m.id));
+      return fresh.length ? [...current, ...fresh].sort((a, b) => a.id - b.id) : current;
+    });
   }, [requestId, providerId]);
 
-  // بعد الإرسال: مسح الحقل وجلب احتياطي لو تأخر الحدث اللحظي
+  // الاستطلاع الدوري ما دامت الصفحة ظاهرة والمحادثة مفتوحة
+  useEffect(() => {
+    if (closed) return;
+    const tick = () => {
+      if (document.visibilityState === "visible") refresh().catch(() => undefined);
+    };
+    const timer = setInterval(tick, POLL_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [closed, refresh]);
+
+  // بعد الإرسال: مسح الحقل وجلب الرسالة فوراً
   useEffect(() => {
     if (state.status !== "sent" && state.status !== "masked") return;
     formRef.current?.reset();
-    const supabase = createClient();
-    supabase
-      .from("messages")
-      .select("id, sender_id, sender_role, body, was_masked, created_at")
-      .eq("request_id", requestId)
-      .eq("provider_id", providerId)
-      .order("id")
-      .then(({ data }) => {
-        if (data) {
-          setMessages((current) => {
-            const known = new Set(current.map((m) => m.id));
-            const fresh = data.filter((m) => !known.has(m.id));
-            return fresh.length ? [...current, ...fresh].sort((a, b) => a.id - b.id) : current;
-          });
-        }
-      });
-  }, [state, requestId, providerId]);
+    refresh().catch(() => undefined);
+  }, [state, refresh]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });

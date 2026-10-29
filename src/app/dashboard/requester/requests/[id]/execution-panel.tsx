@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Enums, Json, Tables } from "@/lib/db/types";
 import { getRequestDocuments } from "@/lib/execution/queries";
 import { formatDateTime, timeLeft } from "@/lib/format";
 import { formatHalalas } from "@/lib/money";
@@ -17,14 +18,24 @@ const DECISION_LABEL = {
 
 /** مراحل ما بعد الدفع من جهة العميل: التفويض، المستندات، المتابعة، التأكيد أو الاعتراض */
 export async function RequesterExecutionPanel({ requestId }: { requestId: string }) {
-  const supabase = await createClient();
-  const { data: request } = await supabase
-    .from("service_requests")
-    .select(
-      "status, delegation_confirmed_at, started_at, due_at, delivered_at, delivery_note, is_late, service_types(delegation_platform, required_docs)",
-    )
-    .eq("id", requestId)
-    .single();
+  const db = await getDb();
+  const request = await db.maybeOne<{
+    status: Enums<"request_status">;
+    delegation_confirmed_at: string | null;
+    started_at: string | null;
+    due_at: string | null;
+    delivered_at: string | null;
+    delivery_note: string | null;
+    is_late: boolean;
+    delegation_platform: Enums<"delegation_platform"> | null;
+    required_docs: string[] | null;
+  }>(
+    `select r.status, r.delegation_confirmed_at, r.started_at, r.due_at, r.delivered_at,
+            r.delivery_note, r.is_late, t.delegation_platform, t.required_docs
+     from public.service_requests r left join public.service_types t on t.id = r.service_type_id
+     where r.id = $1`,
+    [requestId],
+  );
   if (
     !request ||
     !["awaiting_client", "in_progress", "delivered", "disputed", "resolved", "completed"].includes(
@@ -34,12 +45,19 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
     return null;
   }
 
-  const platform = request.service_types?.delegation_platform ?? "none";
-  const [{ data: guide }, documents, { data: dispute }, { data: confirmDays }] = await Promise.all([
-    supabase.from("delegation_guides").select("title, steps").eq("platform", platform).single(),
+  const platform = request.delegation_platform ?? "none";
+  const [guide, documents, dispute, confirmDays] = await Promise.all([
+    db.maybeOne<{ title: string; steps: string[] }>(
+      "select title, steps from public.delegation_guides where platform = $1",
+      [platform],
+    ),
     getRequestDocuments(requestId),
-    supabase.from("disputes").select("*").eq("request_id", requestId).maybeSingle(),
-    supabase.from("settings").select("value").eq("key", "delivery_confirmation_days").single(),
+    db.maybeOne<Tables<"disputes">>("select * from public.disputes where request_id = $1", [
+      requestId,
+    ]),
+    db.maybeOne<{ value: Json }>(
+      "select value from public.settings where key = 'delivery_confirmation_days'",
+    ),
   ]);
   const clientDocs = documents.filter((d) => d.kind === "client_document");
   const proofs = documents.filter((d) => d.kind === "delivery_proof");
@@ -84,7 +102,7 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
           {canUpload && (
             <UploadRequestDocument
               requestId={requestId}
-              labels={request.service_types?.required_docs ?? []}
+              labels={request.required_docs ?? []}
               testId="upload-client-document"
             />
           )}

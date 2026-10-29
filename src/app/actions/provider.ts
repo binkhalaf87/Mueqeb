@@ -3,7 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import { attempt } from "@/lib/db/core";
+import { removeObjects, uploadObject } from "@/lib/storage";
 import { fieldErrors } from "@/lib/auth/validation";
 import { formatHalalas } from "@/lib/money";
 import { getMyProvider } from "@/lib/providers/queries";
@@ -42,33 +44,37 @@ export async function saveProviderProfile(
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
   const { officeName, crNumber, municipalLicenseNumber, cities, bio } = parsed.data;
-  const supabase = await createClient();
+  const db = await getDb();
   const existing = await getMyProvider(user.id);
 
   let error;
   if (!existing) {
-    ({ error } = await supabase.from("providers").insert({
-      profile_id: user.id,
-      office_name: officeName,
-      cr_number: crNumber,
-      municipal_license_number: municipalLicenseNumber,
-      cities,
-      bio,
-    }));
+    ({ error } = await attempt(
+      db.query(
+        `insert into public.providers
+           (profile_id, office_name, cr_number, municipal_license_number, cities, bio)
+         values ($1, $2, $3, $4, $5, $6)`,
+        [user.id, officeName, crNumber, municipalLicenseNumber, cities, bio ?? null],
+      ),
+    ));
+  } else if (isEditableStage(providerStage(existing))) {
+    ({ error } = await attempt(
+      db.query(
+        `update public.providers
+         set cities = $2, bio = $3, office_name = $4, cr_number = $5, municipal_license_number = $6
+         where id = $1`,
+        [existing.id, cities, bio ?? null, officeName, crNumber, municipalLicenseNumber],
+      ),
+    ));
   } else {
-    const identityEditable = isEditableStage(providerStage(existing));
-    ({ error } = await supabase
-      .from("providers")
-      .update({
+    // بعد الإرسال أو الاعتماد: الهوية (الاسم والسجل والرخصة) ثابتة
+    ({ error } = await attempt(
+      db.query("update public.providers set cities = $2, bio = $3 where id = $1", [
+        existing.id,
         cities,
-        bio,
-        ...(identityEditable && {
-          office_name: officeName,
-          cr_number: crNumber,
-          municipal_license_number: municipalLicenseNumber,
-        }),
-      })
-      .eq("id", existing.id));
+        bio ?? null,
+      ]),
+    ));
   }
 
   if (error) {
@@ -102,11 +108,9 @@ export async function uploadProviderDocument(
 
   const ext = ALLOWED_DOCUMENT_MIME[doc.type as keyof typeof ALLOWED_DOCUMENT_MIME];
   const path = `${provider.id}/${docType.data}-${randomUUID()}.${ext}`;
-  const supabase = await createClient();
+  const db = await getDb();
 
-  const { error: uploadError } = await supabase.storage
-    .from(DOCUMENTS_BUCKET)
-    .upload(path, doc, { contentType: doc.type, upsert: false });
+  const { error: uploadError } = await uploadObject(db, DOCUMENTS_BUCKET, path, doc);
   if (uploadError) return { message: "تعذّر رفع الملف، حاول مرة أخرى." };
 
   const meta = {
@@ -115,30 +119,42 @@ export async function uploadProviderDocument(
     mime_type: doc.type,
     size_bytes: doc.size,
   };
-  const { data: previous } = await supabase
-    .from("provider_documents")
-    .select("id, storage_path")
-    .eq("provider_id", provider.id)
-    .eq("doc_type", docType.data as ProviderDocumentType)
-    .maybeSingle();
+  const previous = await db.maybeOne<{ id: string; storage_path: string }>(
+    "select id, storage_path from public.provider_documents where provider_id = $1 and doc_type = $2",
+    [provider.id, docType.data as ProviderDocumentType],
+  );
 
   const { error: dbError } = previous
-    ? await supabase
-        .from("provider_documents")
-        .update({ ...meta, uploaded_at: new Date().toISOString() })
-        .eq("id", previous.id)
-    : await supabase.from("provider_documents").insert({
-        ...meta,
-        provider_id: provider.id,
-        doc_type: docType.data as ProviderDocumentType,
-      });
+    ? await attempt(
+        db.query(
+          `update public.provider_documents
+           set storage_path = $2, file_name = $3, mime_type = $4, size_bytes = $5, uploaded_at = now()
+           where id = $1`,
+          [previous.id, meta.storage_path, meta.file_name, meta.mime_type, meta.size_bytes],
+        ),
+      )
+    : await attempt(
+        db.query(
+          `insert into public.provider_documents
+             (provider_id, doc_type, storage_path, file_name, mime_type, size_bytes)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [
+            provider.id,
+            docType.data as ProviderDocumentType,
+            meta.storage_path,
+            meta.file_name,
+            meta.mime_type,
+            meta.size_bytes,
+          ],
+        ),
+      );
 
   if (dbError) {
-    await supabase.storage.from(DOCUMENTS_BUCKET).remove([path]);
+    await removeObjects(db, DOCUMENTS_BUCKET, [path]);
     return { message: "تعذّر حفظ المستند، حاول مرة أخرى." };
   }
   if (previous) {
-    await supabase.storage.from(DOCUMENTS_BUCKET).remove([previous.storage_path]);
+    await removeObjects(db, DOCUMENTS_BUCKET, [previous.storage_path]);
   }
 
   revalidateProviderPages();
@@ -154,8 +170,8 @@ const SUBMIT_ERRORS: Record<string, string> = {
 
 export async function submitProviderForReview(): Promise<FormState> {
   await requireRole("provider");
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("submit_provider_for_review");
+  const db = await getDb();
+  const { error } = await db.rpc("submit_provider_for_review");
   if (error) {
     const key = Object.keys(SUBMIT_ERRORS).find((k) => error.message.includes(k));
     return { message: key ? SUBMIT_ERRORS[key] : "تعذّر الإرسال، حاول مرة أخرى." };
@@ -183,13 +199,12 @@ export async function saveProviderService(
   if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
 
   const { serviceTypeId, fee, durationDays, notes } = parsed.data;
-  const supabase = await createClient();
+  const db = await getDb();
 
-  const { data: serviceType } = await supabase
-    .from("service_types")
-    .select("min_fee_halalas")
-    .eq("id", serviceTypeId)
-    .single();
+  const serviceType = await db.maybeOne<{ min_fee_halalas: number }>(
+    "select min_fee_halalas from public.service_types where id = $1",
+    [serviceTypeId],
+  );
   if (!serviceType) return { errors: { serviceTypeId: "خدمة غير معروفة" }, values };
   if (fee < serviceType.min_fee_halalas) {
     return {
@@ -203,18 +218,22 @@ export async function saveProviderService(
   const serviceId = formData.get("serviceId");
   const { error } =
     typeof serviceId === "string" && serviceId
-      ? await supabase
-          .from("provider_services")
-          .update({ fee_halalas: fee, duration_days: durationDays, notes })
-          .eq("id", serviceId)
-          .eq("provider_id", provider.id)
-      : await supabase.from("provider_services").insert({
-          provider_id: provider.id,
-          service_type_id: serviceTypeId,
-          fee_halalas: fee,
-          duration_days: durationDays,
-          notes,
-        });
+      ? await attempt(
+          db.query(
+            `update public.provider_services
+             set fee_halalas = $3, duration_days = $4, notes = $5
+             where id = $1 and provider_id = $2`,
+            [serviceId, provider.id, fee, durationDays, notes ?? null],
+          ),
+        )
+      : await attempt(
+          db.query(
+            `insert into public.provider_services
+               (provider_id, service_type_id, fee_halalas, duration_days, notes)
+             values ($1, $2, $3, $4, $5)`,
+            [provider.id, serviceTypeId, fee, durationDays, notes ?? null],
+          ),
+        );
 
   if (error) {
     if (error.code === "23505") {
@@ -234,12 +253,14 @@ export async function setProviderServiceActive(formData: FormData) {
   const user = await requireRole("provider");
   const provider = await getMyProvider(user.id);
   if (!provider) return;
-  const supabase = await createClient();
-  await supabase
-    .from("provider_services")
-    .update({ active: formData.get("active") === "true" })
-    .eq("id", String(formData.get("serviceId")))
-    .eq("provider_id", provider.id);
+  const db = await getDb();
+  await attempt(
+    db.query("update public.provider_services set active = $3 where id = $1 and provider_id = $2", [
+      String(formData.get("serviceId")),
+      provider.id,
+      formData.get("active") === "true",
+    ]),
+  );
   revalidateProviderPages();
 }
 
@@ -247,11 +268,12 @@ export async function deleteProviderService(formData: FormData) {
   const user = await requireRole("provider");
   const provider = await getMyProvider(user.id);
   if (!provider) return;
-  const supabase = await createClient();
-  await supabase
-    .from("provider_services")
-    .delete()
-    .eq("id", String(formData.get("serviceId")))
-    .eq("provider_id", provider.id);
+  const db = await getDb();
+  await attempt(
+    db.query("delete from public.provider_services where id = $1 and provider_id = $2", [
+      String(formData.get("serviceId")),
+      provider.id,
+    ]),
+  );
   revalidateProviderPages();
 }

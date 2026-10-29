@@ -787,9 +787,8 @@ create policy "order_events: members, awarded provider, admin"
   );
 
 -- ============================================================
--- المهمة المجدولة: كل 5 دقائق
+-- المهمة المجدولة: كل 5 دقائق (يشغّلها مُجدول التطبيق من جدول cron.job)
 -- ============================================================
-create extension if not exists pg_cron;
 
 select cron.schedule(
   'expire-stale-requests',

@@ -8,6 +8,7 @@ import {
   roundBps,
 } from "@/lib/payments/amounts";
 import { MOCK_TEST_CARDS, MockGateway, signMockPayload } from "@/lib/payments/mock-gateway";
+import { isProductionDeployment } from "@/lib/payments";
 import { MoyasarGateway } from "@/lib/payments/moyasar";
 import { WebhookVerificationError } from "@/lib/payments/types";
 
@@ -343,5 +344,16 @@ describe("calcSettlement (escrow distribution on close)", () => {
     expect(cancellationAfterStartRefund(33_333, 3000)).toBe(33_333 - 10_000); // 9,999.9 → 10,000
     expect(cancellationAfterStartRefund(10_000, 0)).toBe(10_000);
     expect(cancellationAfterStartRefund(10_000, 10_000)).toBe(0);
+  });
+});
+
+describe("isProductionDeployment (mock gateway guard)", () => {
+  it("detects production on Railway and Vercel only", () => {
+    expect(isProductionDeployment({ RAILWAY_ENVIRONMENT_NAME: "production" })).toBe(true);
+    expect(isProductionDeployment({ RAILWAY_ENVIRONMENT: "production" })).toBe(true);
+    expect(isProductionDeployment({ VERCEL_ENV: "production" })).toBe(true);
+    expect(isProductionDeployment({ RAILWAY_ENVIRONMENT_NAME: "staging" })).toBe(false);
+    expect(isProductionDeployment({ VERCEL_ENV: "preview" })).toBe(false);
+    expect(isProductionDeployment({})).toBe(false);
   });
 });

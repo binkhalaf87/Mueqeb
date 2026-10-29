@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Enums } from "@/lib/db/types";
 import { MODE_LABEL } from "@/lib/requests/constants";
 import { formatDateTime } from "@/lib/format";
 import { RequestStatusBadge } from "@/components/request-status-badge";
@@ -11,20 +12,33 @@ export const metadata: Metadata = { title: "طلباتي" };
 
 export default async function RequesterDashboard() {
   const user = await requireRole("requester");
-  const supabase = await createClient();
-  const [{ data: membership }, { data: requests }] = await Promise.all([
-    supabase
-      .from("establishment_members")
-      .select("member_role, requester_accounts(account_type, establishment_name, cr_number)")
-      .eq("user_id", user.id)
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("service_requests")
-      .select("id, mode, city, status, created_at, service_types(name_ar)")
-      .order("created_at", { ascending: false }),
+  const db = await getDb();
+  const [account, requests] = await Promise.all([
+    db.maybeOne<{
+      member_role: Enums<"establishment_member_role">;
+      account_type: Enums<"requester_account_type">;
+      establishment_name: string | null;
+      cr_number: string | null;
+    }>(
+      `select m.member_role, a.account_type, a.establishment_name, a.cr_number
+       from public.establishment_members m
+       join public.requester_accounts a on a.id = m.account_id
+       where m.user_id = $1 limit 1`,
+      [user.id],
+    ),
+    db.query<{
+      id: string;
+      mode: Enums<"request_mode">;
+      city: string;
+      status: Enums<"request_status">;
+      created_at: string;
+      service_name: string | null;
+    }>(
+      `select r.id, r.mode, r.city, r.status, r.created_at, t.name_ar as service_name
+       from public.service_requests r left join public.service_types t on t.id = r.service_type_id
+       order by r.created_at desc`,
+    ),
   ]);
-  const account = membership?.requester_accounts;
 
   return (
     <div className="space-y-6">
@@ -39,7 +53,7 @@ export default async function RequesterDashboard() {
             <p>
               منشأة: {account.establishment_name} — سجل تجاري{" "}
               <span dir="ltr">{account.cr_number}</span>
-              {membership?.member_role === "owner" && " (مالك)"}
+              {account.member_role === "owner" && " (مالك)"}
             </p>
           ) : (
             <p>حساب فردي</p>
@@ -62,7 +76,7 @@ export default async function RequesterDashboard() {
       </div>
 
       <Card className="p-0">
-        {!requests?.length ? (
+        {!requests.length ? (
           <p className="p-6 text-sm text-muted">لا توجد طلبات بعد.</p>
         ) : (
           <ul className="divide-y divide-border" data-testid="my-requests">
@@ -72,7 +86,7 @@ export default async function RequesterDashboard() {
                   href={`/dashboard/requester/requests/${r.id}`}
                   className="flex flex-wrap items-center gap-x-4 gap-y-1 px-6 py-4 hover:bg-background"
                 >
-                  <span className="font-medium">{r.service_types?.name_ar}</span>
+                  <span className="font-medium">{r.service_name}</span>
                   <span className="text-sm text-muted">
                     {MODE_LABEL[r.mode]} · {r.city}
                   </span>

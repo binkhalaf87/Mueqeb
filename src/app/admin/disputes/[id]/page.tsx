@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { getRequestDocuments } from "@/lib/execution/queries";
 import { formatHalalas } from "@/lib/money";
 import { formatDateTime } from "@/lib/format";
@@ -26,43 +27,72 @@ export default async function DisputePage({ params }: PageProps<"/admin/disputes
   await requireRole("admin");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
-  const supabase = await createClient();
+  const db = await getDb();
 
-  const { data: dispute } = await supabase
-    .from("disputes")
-    .select("*")
-    .eq("request_id", id)
-    .maybeSingle();
+  const dispute = await db.maybeOne<Tables<"disputes">>(
+    "select * from public.disputes where request_id = $1",
+    [id],
+  );
   if (!dispute) notFound();
 
-  const [{ data: request }, { data: order }, { data: events }, { data: messages }, documents] =
-    await Promise.all([
-      supabase
-        .from("service_requests")
-        .select(
-          "status, city, description, delivered_at, delivery_note, is_late, due_at, service_types(name_ar), request_private_details(contact_name, establishment_name)",
-        )
-        .eq("id", id)
-        .single(),
-      supabase
-        .from("orders")
-        .select(
-          "fee_halalas, client_fee_halalas, provider_commission_bps, total_paid_halalas, settlement, refunded_halalas, providers(office_name)",
-        )
-        .eq("request_id", id)
-        .single(),
-      supabase
-        .from("order_events")
-        .select("id, from_status, to_status, actor_role, note, created_at")
-        .eq("request_id", id)
-        .order("created_at"),
-      supabase
-        .from("messages")
-        .select("id, sender_role, body, was_masked, created_at")
-        .eq("request_id", id)
-        .order("id"),
-      getRequestDocuments(id),
-    ]);
+  const [request, order, events, messages, documents] = await Promise.all([
+    db.maybeOne<
+      Pick<
+        Tables<"service_requests">,
+        "status" | "city" | "description" | "delivered_at" | "delivery_note" | "is_late" | "due_at"
+      > & {
+        service_types: { name_ar: string } | null;
+        request_private_details: { contact_name: string; establishment_name: string | null } | null;
+      }
+    >(
+      `select r.status, r.city, r.description, r.delivered_at, r.delivery_note, r.is_late, r.due_at,
+              case when t.id is null then null else json_build_object('name_ar', t.name_ar) end
+                as service_types,
+              case when d.request_id is null then null else json_build_object(
+                'contact_name', d.contact_name, 'establishment_name', d.establishment_name)
+              end as request_private_details
+       from public.service_requests r
+       left join public.service_types t on t.id = r.service_type_id
+       left join public.request_private_details d on d.request_id = r.id
+       where r.id = $1`,
+      [id],
+    ),
+    db.maybeOne<
+      Pick<
+        Tables<"orders">,
+        | "fee_halalas"
+        | "client_fee_halalas"
+        | "provider_commission_bps"
+        | "total_paid_halalas"
+        | "settlement"
+        | "refunded_halalas"
+      > & { providers: { office_name: string } | null }
+    >(
+      `select o.fee_halalas, o.client_fee_halalas, o.provider_commission_bps, o.total_paid_halalas,
+              o.settlement, o.refunded_halalas,
+              case when p.id is null then null else json_build_object('office_name', p.office_name)
+              end as providers
+       from public.orders o left join public.providers p on p.id = o.provider_id
+       where o.request_id = $1`,
+      [id],
+    ),
+    db.query<
+      Pick<
+        Tables<"order_events">,
+        "id" | "from_status" | "to_status" | "actor_role" | "note" | "created_at"
+      >
+    >(
+      `select id, from_status, to_status, actor_role, note, created_at
+       from public.order_events where request_id = $1 order by created_at`,
+      [id],
+    ),
+    db.query<Pick<Tables<"messages">, "id" | "sender_role" | "body" | "was_masked" | "created_at">>(
+      `select id, sender_role, body, was_masked, created_at
+       from public.messages where request_id = $1 order by id`,
+      [id],
+    ),
+    getRequestDocuments(id),
+  ]);
   if (!request || !order) notFound();
 
   return (

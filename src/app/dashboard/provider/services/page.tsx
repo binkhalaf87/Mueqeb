@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { getMyProvider, getServiceCatalog } from "@/lib/providers/queries";
 import { formatHalalas, halalasToInput } from "@/lib/money";
 import { deleteProviderService, setProviderServiceActive } from "@/app/actions/provider";
@@ -32,16 +32,28 @@ export default async function ProviderServicesPage() {
     );
   }
 
-  const supabase = await createClient();
-  const [catalog, { data: services }] = await Promise.all([
+  const db = await getDb();
+  const [catalog, services] = await Promise.all([
     getServiceCatalog(),
-    supabase
-      .from("provider_services")
-      .select(
-        "id, service_type_id, fee_halalas, duration_days, notes, active, service_types(name_ar, min_fee_halalas, service_categories(name_ar))",
-      )
-      .eq("provider_id", provider.id)
-      .order("created_at"),
+    db.query<{
+      id: string;
+      service_type_id: string;
+      fee_halalas: number;
+      duration_days: number;
+      notes: string | null;
+      active: boolean;
+      service_name: string | null;
+      category_name: string | null;
+    }>(
+      `select s.id, s.service_type_id, s.fee_halalas, s.duration_days, s.notes, s.active,
+              t.name_ar as service_name, c.name_ar as category_name
+       from public.provider_services s
+       left join public.service_types t on t.id = s.service_type_id
+       left join public.service_categories c on c.id = t.category_id
+       where s.provider_id = $1
+       order by s.created_at`,
+      [provider.id],
+    ),
   ]);
 
   const options: ServiceOption[] = catalog.flatMap((category) =>
@@ -54,7 +66,7 @@ export default async function ProviderServicesPage() {
       guideMax: t.guide_max_halalas,
     })),
   );
-  const taken = new Set((services ?? []).map((s) => s.service_type_id));
+  const taken = new Set(services.map((s) => s.service_type_id));
 
   return (
     <div className="space-y-6">
@@ -69,8 +81,8 @@ export default async function ProviderServicesPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-4 font-semibold">خدماتي ({services?.length ?? 0})</h2>
-        {!services?.length ? (
+        <h2 className="mb-4 font-semibold">خدماتي ({services.length})</h2>
+        {!services.length ? (
           <p className="text-sm text-muted">لم تضف خدمات بعد.</p>
         ) : (
           <ul className="divide-y divide-border" data-testid="my-services">
@@ -80,10 +92,10 @@ export default async function ProviderServicesPage() {
                 <li key={s.id} className="space-y-3 py-4">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium">{s.service_types?.name_ar}</p>
+                      <p className="font-medium">{s.service_name}</p>
                       <p className="text-sm text-muted">
-                        {s.service_types?.service_categories?.name_ar} · يبدأ من{" "}
-                        {formatHalalas(s.fee_halalas)} · {s.duration_days} يوم
+                        {s.category_name} · يبدأ من {formatHalalas(s.fee_halalas)} ·{" "}
+                        {s.duration_days} يوم
                       </p>
                       {s.notes && <p className="mt-1 text-sm">{s.notes}</p>}
                     </div>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { getServiceCatalog } from "@/lib/providers/queries";
 import { SAUDI_CITIES, isSaudiCity } from "@/lib/cities";
 import { formatHalalas } from "@/lib/money";
@@ -19,10 +19,10 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
   const serviceId = typeof service === "string" && UUID.test(service) ? service : undefined;
   const cityFilter = typeof city === "string" && isSaudiCity(city) ? city : undefined;
 
-  const supabase = await createClient();
+  const db = await getDb();
   const [catalog, { data: providers }] = await Promise.all([
     getServiceCatalog(),
-    supabase.rpc("public_providers", { p_service_type_id: serviceId, p_city: cityFilter }),
+    db.rpc("public_providers", { p_service_type_id: serviceId, p_city: cityFilter }),
   ]);
   // الترتيب حسب المعادلة الموثقة في src/lib/providers/ranking.ts
   const statsById = await getProviderStats((providers ?? []).map((p) => p.id));

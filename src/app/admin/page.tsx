@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { getAdminKpis } from "@/lib/admin/kpis";
 import { formatHalalas } from "@/lib/money";
 import { Card, PageTitle } from "@/components/ui";
@@ -35,15 +35,15 @@ function Kpi({
 
 export default async function AdminDashboard() {
   await requireRole("admin");
-  const supabase = await createClient();
-  const [k, { count: queueCount }] = await Promise.all([
+  const db = await getDb();
+  const [k, queue] = await Promise.all([
     getAdminKpis(),
-    supabase
-      .from("providers")
-      .select("id", { count: "exact", head: true })
-      .eq("verification_status", "pending")
-      .not("submitted_at", "is", null),
+    db.one<{ count: number }>(
+      `select count(*) as count from public.providers
+       where verification_status = 'pending' and submitted_at is not null`,
+    ),
   ]);
+  const queueCount = queue.count;
   const commission = k.revenue_halalas - k.revenue_client_fee_halalas;
 
   return (

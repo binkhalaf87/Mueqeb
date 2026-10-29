@@ -58,15 +58,16 @@ completed | disputed → resolved
 ## التقنية
 - Next.js (App Router) + TypeScript + Tailwind، واجهة عربية بالكامل RTL (`dir="rtl"`)، خط عربي
   مناسب (مثل IBM Plex Sans Arabic).
-- Supabase: Postgres + Auth + Storage + Edge Functions/cron.
-- النشر على Vercel.
+- Postgres عادي (بلا Supabase) عبر `pg`، مع دخول ذاتي (bcrypt + جلسة موقّعة)، وتخزين ملفات خاص
+  على قرص الخادم، ومُجدول مهام داخل الخادم.
+- النشر على Railway: خدمة Postgres + خدمة التطبيق مع Volume للملفات (`railway.json`).
 - بوابة دفع سعودية بوضع الاختبار (مثل Moyasar)، خلف واجهة `PaymentProvider` مجردة لتسهيل
   التبديل.
 - التحقق من المدخلات بـ zod، والاختبارات بـ Vitest + Playwright للمسارات الحرجة.
 
 ## أسلوب العمل
 - اعمل على مرحلة واحدة فقط كما يحددها البرومبت، ولا تبنِ ميزات مراحل لاحقة.
-- migrations في `supabase/migrations` بأسماء واضحة؛ لا تعديل يدوي على قاعدة البيانات.
+- migrations في `db/migrations` بأسماء واضحة؛ لا تعديل يدوي على قاعدة البيانات.
 - حدّث `docs/progress.md` في نهاية كل مرحلة: ما أُنجز، ما لم يُنجز، قرارات اتخذتها، أسئلة لي.
 - عند الغموض في قاعدة عمل، اختر الأبسط واذكر ذلك في التقرير بدل التوقف.
 - في نهاية كل مرحلة: شغّل الاختبارات والـ lint والـ build، واعرض تقريراً قصيراً مع خطوات
@@ -77,15 +78,24 @@ completed | disputed → resolved
   `node_modules/next/dist/docs/` قبل استخدام أي API.
 - التحقق من الدور يتم في الخادم داخل كل صفحة عبر `requireRole()` من `src/lib/auth/session.ts`؛
   الـ proxy فحص تفاؤلي فقط.
-- الدفع: كل كتابة مالية عبر دوال قاعدة البيانات بمفتاح الخدمة من الخادم (`src/lib/payments/process.ts`)،
+- الوصول للبيانات: `getDb()` من `src/lib/db/server.ts` يعمل بهوية المستخدم (SET LOCAL ROLE authenticated +
+  claims) فتحكم سياسات RLS كما هي؛ `serviceDb()` بهوية الخادم (يتجاوز RLS) للعمليات المالية والإدارية فقط.
+  أساس ذلك migration المنصة `20261027000001_platform.sql` (الأدوار، `auth.uid()`، `storage.objects`، `cron.job`).
+- الدخول: `auth.users` بكلمات مرور bcrypt (`src/lib/auth/accounts.ts`)، والجلسة كوكي موقّع بـ `AUTH_SECRET`
+  (`src/lib/auth/token.ts`)، مع حد لمحاولات الدخول الفاشلة. لا تُخزَّن أي بيانات دخول لحسابات حكومية.
+- الملفات: `src/lib/storage` على `STORAGE_DIR` (Volume في Railway)؛ الرفع والقراءة والحذف تمر بسياسات RLS على
+  `storage.objects`، والتنزيل فقط عبر رابط موقّع مؤقت `/api/files/<token>`.
+- الدفع: كل كتابة مالية عبر دوال قاعدة البيانات بهوية الخادم (`src/lib/payments/process.ts`)،
   والدفتر `ledger_entries` لا يُكتب إلا عبر `ledger_transfer` ولا يُعدّل أبداً. البوابة تُختار بـ `PAYMENT_PROVIDER`
   (`mock` محلياً، `moyasar` بمفاتيح test فقط).
-- المحادثة تعتمد على Supabase Realtime: لا تستثنِ `realtime` عند `supabase start`.
+- المحادثة: استطلاع كل 3 ثوانٍ عبر `/api/messages` (يقرأ بهوية المستخدم فيقصره RLS على أطراف الخيط).
+- المهام المجدولة: تُعلن بـ `cron.schedule()` في الـ migrations ويشغّلها `src/lib/scheduler.ts` من
+  `src/instrumentation.ts` (قفل استشاري يمنع التشغيل المزدوج؛ `SCHEDULER=off` لتعطيله).
 - آلة الحالات: `transition_request` (يحدد المنفّذ من الجلسة) و`transition_request_as` (داخلية بمنفّذ صريح).
   أي إغلاق لطلب مدفوع يتطلب تسوية الضمان أولاً (`settle_order_ledger`).
 - لوحة الإدارة: كل رقم مالي من الدفتر عبر `admin_kpis` و`ledger_account_balances`؛ كل تغيير إداري يُسجَّل
   في `admin_audit_log` (append-only) عبر triggers أو دوال الإدارة.
 - ترتيب المزوّدين في التصفح: المعادلة والأوزان في `src/lib/providers/ranking.ts`.
-- بعد أي migration: `npm run db:reset && npm run seed && npm run db:types`.
+- بعد أي migration: `npm run db:reset && npm run seed && npm run db:types` (Postgres محلي: `npm run db:start`).
 - الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`
-  ثم `npm run test:e2e` (يحتاج Supabase محلياً + seed).
+  ثم `npm run test:e2e` (يحتاج Postgres محلياً + seed).

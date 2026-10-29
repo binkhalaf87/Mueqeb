@@ -86,7 +86,7 @@ test("مزوّد غير معتمد مخفي، ويظهر بعد الاعتماد
   const links = adminPage.getByTestId("admin-documents").getByRole("link");
   await expect(links).toHaveCount(4);
   const href = await links.first().getAttribute("href");
-  expect(href).toContain("token=");
+  expect(href).toMatch(/^\/api\/files\/[\w-]+\.[\w-]+$/);
   expect((await adminPage.request.get(href!)).status()).toBe(200);
 
   await adminPage.getByRole("button", { name: "اعتماد" }).click();

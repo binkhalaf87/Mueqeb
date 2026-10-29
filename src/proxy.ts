@@ -1,8 +1,29 @@
-import type { NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/proxy";
+import { NextResponse, type NextRequest } from "next/server";
+import { isAuthPath, isProtectedPath } from "@/lib/auth/routes";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
 
+/**
+ * فحص تفاؤلي للدخول من كوكي الجلسة الموقّع.
+ * التحقق النهائي من الدور والإيقاف يتم في الخادم داخل كل صفحة (requireRole).
+ */
 export async function proxy(request: NextRequest) {
-  return updateSession(request);
+  const signedIn = Boolean(await verifySession(request.cookies.get(SESSION_COOKIE)?.value));
+  const { pathname } = request.nextUrl;
+
+  if (!signedIn && isProtectedPath(pathname)) {
+    return redirectTo(request, "/login", pathname);
+  }
+  if (signedIn && isAuthPath(pathname)) {
+    return redirectTo(request, "/dashboard");
+  }
+  return NextResponse.next();
+}
+
+function redirectTo(request: NextRequest, to: string, next?: string) {
+  const target = request.nextUrl.clone();
+  target.pathname = to;
+  target.search = next ? `?next=${encodeURIComponent(next)}` : "";
+  return NextResponse.redirect(target);
 }
 
 export const config = {

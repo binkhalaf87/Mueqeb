@@ -1,4 +1,4 @@
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database } from "@/lib/db/types";
 
 export type ProviderDocumentType = Database["public"]["Enums"]["provider_document_type"];
 export type VerificationStatus = Database["public"]["Enums"]["provider_verification_status"];

@@ -12,19 +12,21 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "db:start": "supabase start",
-    "db:stop": "supabase stop",
-    "db:reset": "supabase db reset",
-    "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts && prettier --write src/lib/supabase/database.types.ts",
+    "db:start": "docker run -d --name mueqeb_pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:17",
+    "db:stop": "docker rm -f mueqeb_pg",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "db:types": "tsx scripts/gen-types.ts && prettier --write src/lib/db/types.ts",
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.118.0",
+    "dotenv": "^18.0.9",
     "next": "16.4.3",
+    "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -34,15 +36,14 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "dotenv": "^18.0.9",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
-    "pg": "^8.23.1",
     "prettier": "^3.9.10",
-    "supabase": "^2.122.0",
     "tailwindcss": "^4",
-    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

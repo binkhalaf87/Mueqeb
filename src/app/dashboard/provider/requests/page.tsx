@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Enums } from "@/lib/db/types";
 import { getMyProvider } from "@/lib/providers/queries";
 import { formatHalalas } from "@/lib/money";
 import { timeLeft } from "@/lib/format";
@@ -33,20 +34,33 @@ export default async function ProviderRequestsPage({
     );
   }
 
-  const supabase = await createClient();
+  const db = await getDb();
   // RLS يعيد فقط: العامة المفتوحة في خدماتي ومدني، والموجّهة لي، وما قدّمت عليه عرضاً
-  const [{ data: requests }, { data: bids }] = await Promise.all([
-    supabase
-      .from("service_requests")
-      .select(
-        "id, mode, city, urgency, description, available_docs, status, bids_deadline, target_provider_id, service_types(name_ar)",
-      )
-      .order("created_at", { ascending: false }),
-    supabase.from("bids").select("request_id, status, fee_halalas"),
+  const [requests, bids] = await Promise.all([
+    db.query<{
+      id: string;
+      mode: Enums<"request_mode">;
+      city: string;
+      urgency: Enums<"request_urgency">;
+      description: string;
+      available_docs: string[];
+      status: Enums<"request_status">;
+      bids_deadline: string | null;
+      target_provider_id: string | null;
+      service_name: string | null;
+    }>(
+      `select r.id, r.mode, r.city, r.urgency, r.description, r.available_docs, r.status,
+              r.bids_deadline, r.target_provider_id, t.name_ar as service_name
+       from public.service_requests r left join public.service_types t on t.id = r.service_type_id
+       order by r.created_at desc`,
+    ),
+    db.query<{ request_id: string; status: Enums<"bid_status">; fee_halalas: number }>(
+      "select request_id, status, fee_halalas from public.bids",
+    ),
   ]);
-  const bidByRequest = new Map((bids ?? []).map((b) => [b.request_id, b]));
+  const bidByRequest = new Map(bids.map((b) => [b.request_id, b]));
 
-  const rows = (requests ?? []).filter((r) =>
+  const rows = requests.filter((r) =>
     mine
       ? bidByRequest.has(r.id)
       : r.status === "open" &&
@@ -96,7 +110,7 @@ export default async function ProviderRequestsPage({
                 <Link href={`/dashboard/provider/requests/${r.id}`} className="block">
                   <Card className="space-y-2 transition hover:border-primary">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-semibold">{r.service_types?.name_ar}</h2>
+                      <h2 className="font-semibold">{r.service_name}</h2>
                       {r.mode === "direct_quote" && <Badge tone="info">موجّه إليك</Badge>}
                       {r.urgency === "urgent" && (
                         <Badge tone="warning">{URGENCY_LABEL.urgent}</Badge>

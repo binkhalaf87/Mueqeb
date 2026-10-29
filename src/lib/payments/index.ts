@@ -9,9 +9,14 @@ let cached: PaymentProvider | undefined;
  * البوابة المهيأة من البيئة (وضع الاختبار فقط):
  * PAYMENT_PROVIDER=moyasar (MOYASAR_SECRET_KEY=sk_test_…, MOYASAR_WEBHOOK_SECRET)
  * PAYMENT_PROVIDER=mock    (MOCK_PAYMENT_WEBHOOK_SECRET) — الافتراضي محلياً
- * بوابة الاختبار مرفوضة في إنتاج Vercel إلا بموافقة صريحة لنسخة عرض تجريبية:
+ * بوابة الاختبار مرفوضة في بيئة الإنتاج (Railway أو Vercel) إلا بموافقة صريحة لنسخة عرض تجريبية:
  * ALLOW_MOCK_PAYMENTS_IN_PRODUCTION=1
  */
+export function isProductionDeployment(env: Record<string, string | undefined> = process.env) {
+  const railway = env.RAILWAY_ENVIRONMENT_NAME ?? env.RAILWAY_ENVIRONMENT;
+  return env.VERCEL_ENV === "production" || railway === "production";
+}
+
 export function getPaymentProvider(): PaymentProvider {
   if (cached) return cached;
   const name = process.env.PAYMENT_PROVIDER ?? "mock";
@@ -21,10 +26,7 @@ export function getPaymentProvider(): PaymentProvider {
       process.env.MOYASAR_WEBHOOK_SECRET ?? "",
     );
   } else if (name === "mock") {
-    if (
-      process.env.VERCEL_ENV === "production" &&
-      process.env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION !== "1"
-    ) {
+    if (isProductionDeployment() && process.env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION !== "1") {
       throw new Error("بوابة الاختبار المحلية غير مسموحة في الإنتاج");
     }
     cached = new MockGateway(process.env.MOCK_PAYMENT_WEBHOOK_SECRET ?? "");

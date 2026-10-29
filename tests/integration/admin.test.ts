@@ -9,19 +9,18 @@ import {
   createTestUser,
   serviceClient,
   signIn,
-  supabaseAvailable,
+  databaseAvailable,
   type Client,
 } from "./helpers";
 
-const available = await supabaseAvailable();
-const DB_URL =
-  process.env.SUPABASE_DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+const available = await databaseAvailable();
+const DB_URL = process.env.DATABASE_URL ?? "";
 
 function randomCr() {
   return String(Math.floor(1e9 + Math.random() * 9e9));
 }
 
-describe.skipIf(!available)("admin operations (local Supabase)", () => {
+describe.skipIf(!available)("admin operations (local Postgres)", () => {
   const admin = serviceClient();
   const db = new pg.Client({ connectionString: DB_URL });
   const created: string[] = [];

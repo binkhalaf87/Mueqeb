@@ -4,8 +4,9 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb, serviceDb } from "@/lib/db/server";
+import { attempt } from "@/lib/db/core";
+import { removeObjects, uploadObject } from "@/lib/storage";
 import { REQUEST_DOCUMENTS_BUCKET } from "@/lib/execution/queries";
 import { ALLOWED_DOCUMENT_MIME } from "@/lib/providers/constants";
 import { validateDocumentFile } from "@/lib/providers/validation";
@@ -42,8 +43,8 @@ const requestIdOf = (formData: FormData) => String(formData.get("requestId") ?? 
 
 export async function confirmDelegation(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("requester");
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("confirm_delegation", {
+  const db = await getDb();
+  const { error } = await db.rpc("confirm_delegation", {
     p_request_id: requestIdOf(formData),
   });
   if (error) return { message: message(error) };
@@ -53,8 +54,8 @@ export async function confirmDelegation(_prev: FormState, formData: FormData): P
 
 export async function confirmCompletion(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("requester");
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("confirm_completion", {
+  const db = await getDb();
+  const { error } = await db.rpc("confirm_completion", {
     p_request_id: requestIdOf(formData),
   });
   if (error) return { message: message(error) };
@@ -67,8 +68,8 @@ export async function openDispute(_prev: FormState, formData: FormData): Promise
   const reason = String(formData.get("reason") ?? "").trim();
   if (reason.length < 5) return { errors: { reason: "اكتب سبب الاعتراض (5 أحرف على الأقل)." } };
   if (mentionsCredentials(reason)) return { errors: { reason: CREDENTIALS_MESSAGE } };
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("open_dispute", {
+  const db = await getDb();
+  const { error } = await db.rpc("open_dispute", {
     p_request_id: requestIdOf(formData),
     p_reason: reason,
   });
@@ -81,8 +82,8 @@ export async function openDispute(_prev: FormState, formData: FormData): Promise
 
 export async function startExecution(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("provider");
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("start_execution", { p_request_id: requestIdOf(formData) });
+  const db = await getDb();
+  const { error } = await db.rpc("start_execution", { p_request_id: requestIdOf(formData) });
   if (error) return { message: message(error) };
   revalidateAll();
   return { message: "بدأ التنفيذ." };
@@ -93,8 +94,8 @@ export async function submitDelivery(_prev: FormState, formData: FormData): Prom
   const note = String(formData.get("note") ?? "").trim();
   if (note.length < 5) return { errors: { note: "اكتب وصفاً لما أُنجز." } };
   if (mentionsCredentials(note)) return { errors: { note: CREDENTIALS_MESSAGE } };
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("submit_delivery", {
+  const db = await getDb();
+  const { error } = await db.rpc("submit_delivery", {
     p_request_id: requestIdOf(formData),
     p_note: note,
   });
@@ -127,25 +128,30 @@ export async function uploadRequestDocument(
 
   const ext = ALLOWED_DOCUMENT_MIME[doc.type as keyof typeof ALLOWED_DOCUMENT_MIME];
   const path = `${requestId}/${kind}/${randomUUID()}.${ext}`;
-  const supabase = await createClient();
-  // RLS في التخزين والجدول يتحقق من الدور وحالة الطلب
-  const { error: uploadError } = await supabase.storage
-    .from(REQUEST_DOCUMENTS_BUCKET)
-    .upload(path, doc, { contentType: doc.type });
+  const db = await getDb();
+  // RLS في storage.objects والجدول يتحقق من الدور وحالة الطلب
+  const { error: uploadError } = await uploadObject(db, REQUEST_DOCUMENTS_BUCKET, path, doc);
   if (uploadError) return { message: "لا يمكن رفع ملفات في حالة الطلب الحالية." };
 
-  const { error } = await supabase.from("request_documents").insert({
-    request_id: requestId,
-    kind,
-    label,
-    storage_path: path,
-    file_name: doc.name.slice(0, 200) || `document.${ext}`,
-    mime_type: doc.type,
-    size_bytes: doc.size,
-    uploaded_by: user.id,
-  });
+  const { error } = await attempt(
+    db.query(
+      `insert into public.request_documents
+         (request_id, kind, label, storage_path, file_name, mime_type, size_bytes, uploaded_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        requestId,
+        kind,
+        label,
+        path,
+        doc.name.slice(0, 200) || `document.${ext}`,
+        doc.type,
+        doc.size,
+        user.id,
+      ],
+    ),
+  );
   if (error) {
-    await supabase.storage.from(REQUEST_DOCUMENTS_BUCKET).remove([path]);
+    await removeObjects(db, REQUEST_DOCUMENTS_BUCKET, [path]);
     return { message: "تعذّر حفظ المستند." };
   }
   revalidateAll();
@@ -167,8 +173,8 @@ export async function sendMessage(
   if (!user) return { status: "error", message: "سجّل الدخول." };
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return { status: "error", message: "اكتب رسالة." };
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("send_message", {
+  const db = await getDb();
+  const { data, error } = await db.rpc("send_message", {
     p_request_id: requestIdOf(formData),
     p_provider_id: String(formData.get("providerId") ?? ""),
     p_body: body.slice(0, 2000),
@@ -225,12 +231,11 @@ export async function resolveDispute(_prev: FormState, formData: FormData): Prom
   }
   const { requestId, decision, refundHalalas, note } = parsed.data;
 
-  const supabase = await createClient();
-  const { data: order } = await supabase
-    .from("orders")
-    .select("id, fee_halalas, total_paid_halalas")
-    .eq("request_id", requestId)
-    .single();
+  const db = await getDb();
+  const order = await db.maybeOne<{ id: string; fee_halalas: number; total_paid_halalas: number }>(
+    "select id, fee_halalas, total_paid_halalas from public.orders where request_id = $1",
+    [requestId],
+  );
   if (!order) return { message: "الطلب غير موجود." };
   const amount =
     decision === "full_refund"
@@ -251,7 +256,7 @@ export async function resolveDispute(_prev: FormState, formData: FormData): Prom
     console.error("dispute refund failed", err);
     return { message: "تعذّر الاسترداد من بوابة الدفع؛ لم يُسجّل القرار." };
   }
-  const { error } = await createAdminClient().rpc("resolve_dispute", {
+  const { error } = await serviceDb().rpc("resolve_dispute", {
     p_request_id: requestId,
     p_decision: decision,
     p_refund_halalas: amount,
@@ -281,11 +286,15 @@ export async function updateDelegationGuide(
   if (steps.some(mentionsCredentials) || mentionsCredentials(title)) {
     return { message: "الإرشادات لا يجوز أن تطلب كلمات مرور أو رموز تحقق." };
   }
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("delegation_guides")
-    .update({ title, steps, updated_at: new Date().toISOString(), updated_by: user.id })
-    .eq("platform", platform as "qiwa");
+  const db = await getDb();
+  const { error } = await attempt(
+    db.query(
+      `update public.delegation_guides
+       set title = $2, steps = $3, updated_at = now(), updated_by = $4
+       where platform = $1`,
+      [platform, title, steps, user.id],
+    ),
+  );
   if (error) return { message: "تعذّر الحفظ." };
   revalidateAll();
   return { message: "حُفظت الإرشادات." };
@@ -302,11 +311,13 @@ export async function updateBlockedTerms(_prev: FormState, formData: FormData): 
     ),
   ].slice(0, 200);
   if (terms.length === 0) return { message: "أدخل كلمة واحدة على الأقل." };
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("settings")
-    .update({ value: terms, updated_at: new Date().toISOString() })
-    .eq("key", "chat_blocked_terms");
+  const db = await getDb();
+  const { error } = await attempt(
+    db.query("update public.settings set value = $2::jsonb, updated_at = now() where key = $1", [
+      "chat_blocked_terms",
+      JSON.stringify(terms),
+    ]),
+  );
   if (error) return { message: "تعذّر الحفظ." };
   revalidateAll();
   return { message: `حُفظت ${terms.length} كلمة.` };

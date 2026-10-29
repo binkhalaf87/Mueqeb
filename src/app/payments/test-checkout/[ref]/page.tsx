@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPaymentProvider } from "@/lib/payments";
 import { MockGateway } from "@/lib/payments/mock-gateway";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { serviceDb } from "@/lib/db/server";
 import { formatHalalas } from "@/lib/money";
 import { Card } from "@/components/ui";
 import { TestCardForm } from "./test-card-form";
@@ -18,12 +18,10 @@ export default async function TestCheckoutPage({
 }: PageProps<"/payments/test-checkout/[ref]">) {
   if (!(getPaymentProvider() instanceof MockGateway)) notFound();
   const { ref } = await params;
-  const { data: payment } = await createAdminClient()
-    .from("payments")
-    .select("amount_halalas, status")
-    .eq("gateway", "mock")
-    .eq("provider_ref", ref)
-    .maybeSingle();
+  const payment = await serviceDb().maybeOne<{ amount_halalas: number; status: string }>(
+    "select amount_halalas, status from public.payments where gateway = 'mock' and provider_ref = $1",
+    [ref],
+  );
   if (!payment) notFound();
 
   return (

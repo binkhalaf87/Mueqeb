@@ -11,13 +11,12 @@ import {
   createTestUser,
   serviceClient,
   signIn,
-  supabaseAvailable,
+  databaseAvailable,
   type Client,
 } from "./helpers";
 
-const available = await supabaseAvailable();
-const DB_URL =
-  process.env.SUPABASE_DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+const available = await databaseAvailable();
+const DB_URL = process.env.DATABASE_URL ?? "";
 const BUCKET = "request-documents";
 
 function randomCr() {
@@ -26,7 +25,7 @@ function randomCr() {
 
 const pdf = () => new Blob(["%PDF-1.4 test"], { type: "application/pdf" });
 
-describe.skipIf(!available)("execution, delivery, disputes & chat (local Supabase)", () => {
+describe.skipIf(!available)("execution, delivery, disputes & chat (local Postgres)", () => {
   const admin = serviceClient();
   const db = new pg.Client({ connectionString: DB_URL });
   const created: string[] = [];

@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb, serviceDb } from "@/lib/db/server";
+import { attempt } from "@/lib/db/core";
 import { parseSarToHalalas } from "@/lib/money";
 import { SETTINGS_SCHEMA, type EditableSettingKey } from "@/lib/admin/settings";
 import type { FormState } from "./auth";
@@ -46,7 +46,7 @@ export async function recordPayout(_prev: FormState, formData: FormData): Promis
   if (!parsed.success) return { errors: issues(parsed.error) };
 
   // كتابة مالية: بمفتاح الخدمة عبر دالة القاعدة، مع هوية المدير للتدقيق
-  const { error } = await createAdminClient().rpc("record_provider_payout", {
+  const { error } = await serviceDb().rpc("record_provider_payout", {
     p_provider_id: parsed.data.providerId,
     p_expected_halalas: parsed.data.expected,
     p_bank_reference: parsed.data.bankReference,
@@ -68,17 +68,21 @@ export async function updateSettings(_prev: FormState, formData: FormData): Prom
   const parsed = z.object(SETTINGS_SCHEMA).safeParse(raw);
   if (!parsed.success) return { errors: issues(parsed.error) };
 
-  const supabase = await createClient();
-  const { data: current } = await supabase.from("settings").select("key, value");
-  const currentByKey = new Map((current ?? []).map((s) => [s.key, s.value]));
+  const db = await getDb();
+  const current = await db.query<{ key: string; value: unknown }>(
+    "select key, value from public.settings",
+  );
+  const currentByKey = new Map(current.map((s) => [s.key, s.value]));
   let changed = 0;
   // التحديث بصلاحيات المدير نفسه حتى يسجّل trigger التدقيق هويته
   for (const [key, value] of Object.entries(parsed.data)) {
     if (Number(currentByKey.get(key)) === value) continue;
-    const { error } = await supabase
-      .from("settings")
-      .update({ value, updated_at: new Date().toISOString() })
-      .eq("key", key);
+    const { error } = await attempt(
+      db.query("update public.settings set value = $2::jsonb, updated_at = now() where key = $1", [
+        key,
+        JSON.stringify(value),
+      ]),
+    );
     if (error) return { message: "تعذّر حفظ الإعدادات." };
     changed++;
   }
@@ -149,23 +153,37 @@ export async function saveServiceType(_prev: FormState, formData: FormData): Pro
   });
   if (!parsed.success) return { errors: issues(parsed.error) };
   const v = parsed.data;
-  const fields = {
-    name_ar: v.nameAr,
-    description: v.description || null,
-    min_fee_halalas: v.minFee,
-    guide_min_halalas: v.guideMin,
-    guide_max_halalas: v.guideMax,
-    required_docs: v.requiredDocs,
-    delegation_platform: v.delegation,
-    active: v.active,
-  };
+  const fields = [
+    v.nameAr,
+    v.description || null,
+    v.minFee,
+    v.guideMin,
+    v.guideMax,
+    v.requiredDocs,
+    v.delegation,
+    v.active,
+  ];
 
-  const supabase = await createClient();
+  const db = await getDb();
   const { error } = v.id
-    ? await supabase.from("service_types").update(fields).eq("id", v.id)
-    : await supabase
-        .from("service_types")
-        .insert({ ...fields, category_id: v.categoryId, slug: v.slug });
+    ? await attempt(
+        db.query(
+          `update public.service_types
+           set name_ar = $2, description = $3, min_fee_halalas = $4, guide_min_halalas = $5,
+               guide_max_halalas = $6, required_docs = $7, delegation_platform = $8, active = $9
+           where id = $1`,
+          [v.id, ...fields],
+        ),
+      )
+    : await attempt(
+        db.query(
+          `insert into public.service_types
+             (category_id, slug, name_ar, description, min_fee_halalas, guide_min_halalas,
+              guide_max_halalas, required_docs, delegation_platform, active)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [v.categoryId, v.slug, ...fields],
+        ),
+      );
   if (error) {
     if (error.code === "23505") return { errors: { slug: "المعرّف مستخدم لخدمة أخرى." } };
     return { message: "تعذّر حفظ الخدمة." };
@@ -186,20 +204,14 @@ export async function setSuspension(_prev: FormState, formData: FormData): Promi
   if (!parsed.success) return { message: "بيانات غير صالحة." };
   if (suspend && parsed.data.reason.length < 3) return { errors: { reason: "اكتب سبب الإيقاف." } };
 
-  const service = createAdminClient();
-  const { error } = await service.rpc("set_user_suspension", {
+  // الإيقاف يمنع الدخول الجديد (فحص عند الدخول) ويحوّل الجلسات القائمة لصفحة الإيقاف (requireRole)
+  const { error } = await serviceDb().rpc("set_user_suspension", {
     p_profile_id: parsed.data.profileId,
     p_suspend: suspend,
     p_reason: parsed.data.reason,
     p_admin_id: admin.id,
   });
   if (error) return { message: errorMessage(error) };
-
-  // منع الدخول من مزوّد الهوية أيضاً (الجلسات الجديدة)
-  const { error: banError } = await service.auth.admin.updateUserById(parsed.data.profileId, {
-    ban_duration: suspend ? "876000h" : "none",
-  });
-  if (banError) console.error("auth ban update failed", banError);
 
   revalidatePath("/admin", "layout");
   revalidatePath("/providers", "layout");

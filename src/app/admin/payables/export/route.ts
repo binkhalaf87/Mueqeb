@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 
 /** خلية CSV آمنة: اقتباس، وتعطيل الصيغ (=, +, -, @) لمنع حقن الصيغ في Excel */
 function cell(value: unknown) {
@@ -16,11 +16,11 @@ export async function GET(request: Request) {
     return new Response("Forbidden", { status: 403 });
   }
   const type = new URL(request.url).searchParams.get("type") === "payouts" ? "payouts" : "payables";
-  const supabase = await createClient();
+  const db = await getDb();
   let rows: unknown[][];
 
   if (type === "payables") {
-    const { data } = await supabase.rpc("provider_payables");
+    const { data } = await db.rpc("provider_payables");
     rows = [
       [
         "provider_id",
@@ -44,12 +44,20 @@ export async function GET(request: Request) {
       ]),
     ];
   } else {
-    const { data } = await supabase
-      .from("provider_payouts")
-      .select(
-        "id, provider_id, amount_halalas, bank_reference, note, created_at, providers(office_name)",
-      )
-      .order("created_at", { ascending: false });
+    const data = await db.query<{
+      id: string;
+      provider_id: string;
+      office_name: string | null;
+      amount_halalas: number;
+      bank_reference: string;
+      note: string | null;
+      created_at: string;
+    }>(
+      `select po.id, po.provider_id, p.office_name, po.amount_halalas, po.bank_reference,
+              po.note, po.created_at
+       from public.provider_payouts po left join public.providers p on p.id = po.provider_id
+       order by po.created_at desc`,
+    );
     rows = [
       [
         "payout_id",
@@ -61,10 +69,10 @@ export async function GET(request: Request) {
         "note",
         "created_at",
       ],
-      ...(data ?? []).map((po) => [
+      ...data.map((po) => [
         po.id,
         po.provider_id,
-        po.providers?.office_name ?? "",
+        po.office_name ?? "",
         sar(po.amount_halalas),
         po.amount_halalas,
         po.bank_reference,

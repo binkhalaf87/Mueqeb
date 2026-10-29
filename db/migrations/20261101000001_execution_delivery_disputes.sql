@@ -977,6 +977,3 @@ create policy "request-documents: provider uploads proof"
     and exists (select 1 from public.service_requests r
                 where r.id = ((storage.foldername(name))[1])::uuid and r.status = 'in_progress')
   );
-
--- التحديث اللحظي للمحادثة (Realtime يحترم RLS)
-alter publication supabase_realtime add table public.messages;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Enums, Json } from "@/lib/db/types";
 import { formatDateTime } from "@/lib/format";
 import { DELEGATION_LABEL } from "@/lib/providers/constants";
 import { SETTINGS_FIELDS } from "@/lib/admin/settings";
@@ -26,19 +27,30 @@ function short(value: unknown) {
 
 export default async function SettingsPage() {
   await requireRole("admin");
-  const supabase = await createClient();
-  const [{ data: settings }, { data: guides }, { data: audit }] = await Promise.all([
-    supabase.from("settings").select("key, value"),
-    supabase.from("delegation_guides").select("platform, title, steps").order("platform"),
-    supabase
-      .from("admin_audit_log")
-      .select(
-        "id, entity, entity_key, action, old_value, new_value, reason, created_at, profiles(full_name)",
-      )
-      .order("id", { ascending: false })
-      .limit(100),
+  const db = await getDb();
+  const [settings, guides, audit] = await Promise.all([
+    db.query<{ key: string; value: Json }>("select key, value from public.settings"),
+    db.query<{ platform: Enums<"delegation_platform">; title: string; steps: string[] }>(
+      "select platform, title, steps from public.delegation_guides order by platform",
+    ),
+    db.query<{
+      id: number;
+      entity: string;
+      entity_key: string;
+      action: string;
+      old_value: Json | null;
+      new_value: Json | null;
+      reason: string | null;
+      created_at: string;
+      full_name: string | null;
+    }>(
+      `select a.id, a.entity, a.entity_key, a.action, a.old_value, a.new_value, a.reason,
+              a.created_at, p.full_name
+       from public.admin_audit_log a left join public.profiles p on p.id = a.actor_id
+       order by a.id desc limit 100`,
+    ),
   ]);
-  const value = (key: string) => settings?.find((s) => s.key === key)?.value;
+  const value = (key: string) => settings.find((s) => s.key === key)?.value;
 
   return (
     <div className="space-y-6">
@@ -64,7 +76,7 @@ export default async function SettingsPage() {
         <BlockedTermsForm initial={((value("chat_blocked_terms") as string[]) ?? []).join("\n")} />
       </Card>
 
-      {(guides ?? []).map((g) => (
+      {guides.map((g) => (
         <Card key={g.platform} className="space-y-3" data-testid={`guide-${g.platform}`}>
           <h2 className="font-semibold">
             نصوص التفويض: {g.platform === "none" ? "بدون منصة" : DELEGATION_LABEL[g.platform]}
@@ -75,7 +87,7 @@ export default async function SettingsPage() {
 
       <Card className="p-0">
         <h2 className="border-b border-border px-6 py-3 font-semibold">سجل التغييرات</h2>
-        {!audit?.length ? (
+        {!audit.length ? (
           <p className="p-6 text-sm text-muted">لا تغييرات بعد.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -93,7 +105,7 @@ export default async function SettingsPage() {
                 {audit.map((a) => (
                   <tr key={a.id} className="align-top">
                     <td className="px-4 py-2 whitespace-nowrap">{formatDateTime(a.created_at)}</td>
-                    <td className="px-4 py-2">{a.profiles?.full_name ?? "النظام"}</td>
+                    <td className="px-4 py-2">{a.full_name ?? "النظام"}</td>
                     <td className="px-4 py-2">
                       {ENTITY_LABEL[a.entity] ?? a.entity}:{" "}
                       <span className="font-mono text-xs" dir="ltr">

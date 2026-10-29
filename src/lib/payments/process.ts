@@ -1,5 +1,6 @@
 import "server-only";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { serviceDb } from "@/lib/db/server";
+import type { Tables } from "@/lib/db/types";
 import { getPaymentProvider } from "./index";
 import { WebhookVerificationError, type PaymentEvent } from "./types";
 
@@ -11,16 +12,16 @@ export type PaymentOutcome = "processed" | "duplicate" | "ignored" | "failed" | 
  */
 export async function applyPaymentEvent(event: PaymentEvent): Promise<PaymentOutcome> {
   const provider = getPaymentProvider();
-  const admin = createAdminClient();
+  const admin = serviceDb();
 
   if (event.status === "refunded") {
     // استرداد بدأ من لوحة البوابة: يُسجَّل بقيد عكسي دون إلغاء الطلب تلقائياً
-    const { data: payment } = await admin
-      .from("payments")
-      .select("id, amount_halalas, status")
-      .eq("gateway", provider.name)
-      .eq("provider_ref", event.providerRef)
-      .maybeSingle();
+    const payment = await admin.maybeOne<
+      Pick<Tables<"payments">, "id" | "amount_halalas" | "status">
+    >(
+      "select id, amount_halalas, status from public.payments where gateway = $1 and provider_ref = $2",
+      [provider.name, event.providerRef],
+    );
     if (!payment || payment.status !== "paid") return "ignored";
     const { data, error } = await admin.rpc("record_refund", {
       p_payment_id: payment.id,
@@ -35,7 +36,7 @@ export async function applyPaymentEvent(event: PaymentEvent): Promise<PaymentOut
 
   const { data: outcome, error } = await admin.rpc("record_payment_result", {
     p_gateway: provider.name,
-    // null مقصود: التحقق المباشر من البوابة ليس له معرّف حدث (الأنواع المولّدة لا تعبّر عن ذلك)
+    // null مقصود: التحقق المباشر من البوابة ليس له معرّف حدث
     p_event_id: event.eventId as string,
     p_provider_ref: event.providerRef,
     p_status: event.status,
@@ -47,12 +48,10 @@ export async function applyPaymentEvent(event: PaymentEvent): Promise<PaymentOut
   if (error) throw error;
 
   if (outcome === "refund_required") {
-    const { data: payment } = await admin
-      .from("payments")
-      .select("id")
-      .eq("gateway", provider.name)
-      .eq("provider_ref", event.providerRef)
-      .single();
+    const payment = await admin.maybeOne<{ id: string }>(
+      "select id from public.payments where gateway = $1 and provider_ref = $2",
+      [provider.name, event.providerRef],
+    );
     if (payment) await refundPayment(payment.id, { cancelRequest: false });
   }
   return outcome as PaymentOutcome;
@@ -82,13 +81,18 @@ export async function refundPayment(
   paymentId: string,
   opts: { cancelRequest: boolean; note?: string },
 ) {
-  const admin = createAdminClient();
-  const { data: payment, error } = await admin
-    .from("payments")
-    .select("id, provider_ref, gateway_payment_id, amount_halalas, status, refund_ref")
-    .eq("id", paymentId)
-    .single();
-  if (error || !payment) throw error ?? new Error("payment not found");
+  const admin = serviceDb();
+  const payment = await admin.maybeOne<
+    Pick<
+      Tables<"payments">,
+      "id" | "provider_ref" | "gateway_payment_id" | "amount_halalas" | "status" | "refund_ref"
+    >
+  >(
+    `select id, provider_ref, gateway_payment_id, amount_halalas, status, refund_ref
+     from public.payments where id = $1`,
+    [paymentId],
+  );
+  if (!payment) throw new Error("payment not found");
   if (payment.status !== "paid") throw new Error(`payment is ${payment.status}`);
 
   const refund = await getPaymentProvider().refund({
@@ -115,16 +119,14 @@ export async function refundPayment(
  */
 export async function refundAtGateway(orderId: string, amountHalalas: number) {
   if (amountHalalas <= 0) return null;
-  const admin = createAdminClient();
-  const { data: payment, error } = await admin
-    .from("payments")
-    .select("provider_ref, gateway_payment_id")
-    .eq("order_id", orderId)
-    .eq("status", "paid")
-    .order("paid_at")
-    .limit(1)
-    .single();
-  if (error || !payment) throw error ?? new Error("paid payment not found");
+  const payment = await serviceDb().maybeOne<
+    Pick<Tables<"payments">, "provider_ref" | "gateway_payment_id">
+  >(
+    `select provider_ref, gateway_payment_id from public.payments
+     where order_id = $1 and status = 'paid' order by paid_at limit 1`,
+    [orderId],
+  );
+  if (!payment) throw new Error("paid payment not found");
   const refund = await getPaymentProvider().refund({
     providerRef: payment.provider_ref,
     gatewayPaymentId: payment.gateway_payment_id,

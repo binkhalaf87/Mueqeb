@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import { formatDateTime } from "@/lib/format";
 import { Card, PageTitle } from "@/components/ui";
 
@@ -13,27 +13,34 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
   await requireRole("admin");
   const { tab } = await searchParams;
   const masked = tab === "masked";
-  const supabase = await createClient();
+  const db = await getDb();
 
-  const [{ data: blocked, count: blockedCount }, { data: maskedMessages, count: maskedCount }] =
-    await Promise.all([
-      supabase
-        .from("blocked_messages")
-        .select("id, request_id, body, matched_term, created_at, profiles(full_name, role)", {
-          count: "exact",
-        })
-        .order("id", { ascending: false })
-        .limit(100),
-      // المحادثة المحجوبة: الرسالة تُحفظ بعد الحجب، فيظهر النص المحجوب لا الرقم الأصلي
-      supabase
-        .from("messages")
-        .select("id, request_id, sender_role, body, created_at, profiles(full_name)", {
-          count: "exact",
-        })
-        .eq("was_masked", true)
-        .order("id", { ascending: false })
-        .limit(100),
-    ]);
+  type Row = {
+    id: number;
+    request_id: string;
+    body: string;
+    created_at: string;
+    full_name: string | null;
+    total: number;
+  };
+  const [blocked, maskedMessages] = await Promise.all([
+    db.query<Row & { matched_term: string; role: string | null }>(
+      `select b.id, b.request_id, b.body, b.matched_term, b.created_at, p.full_name, p.role,
+              count(*) over () as total
+       from public.blocked_messages b left join public.profiles p on p.id = b.sender_id
+       order by b.id desc limit 100`,
+    ),
+    // المحادثة المحجوبة: الرسالة تُحفظ بعد الحجب، فيظهر النص المحجوب لا الرقم الأصلي
+    db.query<Row & { sender_role: string }>(
+      `select m.id, m.request_id, m.sender_role, m.body, m.created_at, p.full_name,
+              count(*) over () as total
+       from public.messages m left join public.profiles p on p.id = m.sender_id
+       where m.was_masked
+       order by m.id desc limit 100`,
+    ),
+  ]);
+  const blockedCount = blocked[0]?.total ?? 0;
+  const maskedCount = maskedMessages[0]?.total ?? 0;
 
   return (
     <div className="space-y-6">
@@ -45,12 +52,12 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
         {[
           {
             href: "/admin/reports",
-            label: `طلب كلمة مرور / رمز تحقق (${blockedCount ?? 0})`,
+            label: `طلب كلمة مرور / رمز تحقق (${blockedCount})`,
             active: !masked,
           },
           {
             href: "/admin/reports?tab=masked",
-            label: `مشاركة أرقام وروابط (${maskedCount ?? 0})`,
+            label: `مشاركة أرقام وروابط (${maskedCount})`,
             active: masked,
           },
         ].map((t) => (
@@ -67,16 +74,15 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
 
       <Card className="p-0">
         {!masked ? (
-          !blocked?.length ? (
+          !blocked.length ? (
             <p className="p-6 text-sm text-muted">لا توجد بلاغات.</p>
           ) : (
             <ul className="divide-y divide-border text-sm" data-testid="blocked-messages">
               {blocked.map((b) => (
                 <li key={b.id} className="space-y-1 px-6 py-3">
                   <p className="text-muted">
-                    {formatDateTime(b.created_at)} · {b.profiles?.full_name} (
-                    {ROLE[b.profiles?.role as keyof typeof ROLE] ?? "—"}) · الكلمة: «
-                    {b.matched_term}» · طلب{" "}
+                    {formatDateTime(b.created_at)} · {b.full_name} (
+                    {ROLE[b.role as keyof typeof ROLE] ?? "—"}) · الكلمة: «{b.matched_term}» · طلب{" "}
                     <span className="font-mono" dir="ltr">
                       {b.request_id.slice(0, 8)}
                     </span>
@@ -86,14 +92,14 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
               ))}
             </ul>
           )
-        ) : !maskedMessages?.length ? (
+        ) : !maskedMessages.length ? (
           <p className="p-6 text-sm text-muted">لا توجد محاولات.</p>
         ) : (
           <ul className="divide-y divide-border text-sm" data-testid="masked-messages">
             {maskedMessages.map((m) => (
               <li key={m.id} className="space-y-1 px-6 py-3">
                 <p className="text-muted">
-                  {formatDateTime(m.created_at)} · {m.profiles?.full_name} (
+                  {formatDateTime(m.created_at)} · {m.full_name} (
                   {ROLE[m.sender_role as keyof typeof ROLE]}) · طلب{" "}
                   <span className="font-mono" dir="ltr">
                     {m.request_id.slice(0, 8)}

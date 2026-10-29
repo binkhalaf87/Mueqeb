@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Enums } from "@/lib/db/types";
 import { getServiceCatalog } from "@/lib/providers/queries";
 import { PageTitle } from "@/components/ui";
 import { RequestForm, type ProviderTarget, type ServiceOption } from "./request-form";
@@ -20,13 +21,20 @@ export default async function NewRequestPage({
   const providerId = typeof params.provider === "string" ? params.provider : "";
   const serviceId = typeof params.service === "string" ? params.service : "";
 
-  const supabase = await createClient();
-  const [catalog, { data: accounts }] = await Promise.all([
+  const db = await getDb();
+  const [catalog, accounts] = await Promise.all([
     getServiceCatalog(),
-    supabase
-      .from("establishment_members")
-      .select("account_id, requester_accounts(account_type, establishment_name)")
-      .eq("user_id", user.id),
+    db.query<{
+      account_id: string;
+      account_type: Enums<"requester_account_type">;
+      establishment_name: string | null;
+    }>(
+      `select m.account_id, a.account_type, a.establishment_name
+       from public.establishment_members m
+       join public.requester_accounts a on a.id = m.account_id
+       where m.user_id = $1`,
+      [user.id],
+    ),
   ]);
 
   const options: ServiceOption[] = catalog.flatMap((c) =>
@@ -44,10 +52,11 @@ export default async function NewRequestPage({
   let provider: ProviderTarget | undefined;
   if (mode !== "public") {
     if (!UUID.test(providerId) || !UUID.test(serviceId)) notFound();
-    const [{ data: profile }, { data: services }] = await Promise.all([
-      supabase.rpc("public_provider", { p_provider_id: providerId }).maybeSingle(),
-      supabase.rpc("public_provider_services", { p_provider_id: providerId }),
+    const [{ data: profiles }, { data: services }] = await Promise.all([
+      db.rpc("public_provider", { p_provider_id: providerId }),
+      db.rpc("public_provider_services", { p_provider_id: providerId }),
     ]);
+    const profile = profiles?.[0];
     const listed = services?.find((s) => s.service_type_id === serviceId);
     if (!profile || !listed) notFound();
     provider = {
@@ -80,12 +89,10 @@ export default async function NewRequestPage({
         options={options}
         initialServiceId={mode === "public" ? (UUID.test(serviceId) ? serviceId : "") : serviceId}
         provider={provider}
-        accounts={(accounts ?? []).map((a) => ({
+        accounts={accounts.map((a) => ({
           id: a.account_id,
           label:
-            a.requester_accounts?.account_type === "establishment"
-              ? `منشأة: ${a.requester_accounts.establishment_name}`
-              : "حساب فردي",
+            a.account_type === "establishment" ? `منشأة: ${a.establishment_name}` : "حساب فردي",
         }))}
       />
     </div>

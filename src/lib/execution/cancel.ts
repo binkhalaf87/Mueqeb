@@ -1,7 +1,6 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb, serviceDb } from "@/lib/db/server";
 import { refundAtGateway } from "@/lib/payments/process";
 import type { FormState } from "@/app/actions/auth";
 
@@ -11,16 +10,15 @@ import type { FormState } from "@/app/actions/auth";
  * ليس Server Action: يُستدعى فقط من cancelRequest بعد التحقق من المستخدم.
  */
 export async function cancelInProgress(requestId: string, actorId: string): Promise<FormState> {
-  const supabase = await createClient();
+  const db = await getDb();
   // بصلاحيات المستخدم: يُرجع null لغير أعضاء حساب الطلب
-  const { data: refund, error } = await supabase.rpc("cancellation_after_start_refund", {
+  const { data: refund, error } = await db.rpc("cancellation_after_start_refund", {
     p_request_id: requestId,
   });
-  const { data: order } = await supabase
-    .from("orders")
-    .select("id")
-    .eq("request_id", requestId)
-    .maybeSingle();
+  const order = await db.maybeOne<{ id: string }>(
+    "select id from public.orders where request_id = $1",
+    [requestId],
+  );
   if (error || refund === null || !order) return { message: "الطلب غير متاح." };
 
   let refundRef: string | null;
@@ -30,7 +28,7 @@ export async function cancelInProgress(requestId: string, actorId: string): Prom
     console.error("partial refund failed", err);
     return { message: "تعذّر الاسترداد من بوابة الدفع؛ لم يُلغَ الطلب. حاول لاحقاً." };
   }
-  const { error: cancelError } = await createAdminClient().rpc("cancel_after_start", {
+  const { error: cancelError } = await serviceDb().rpc("cancel_after_start", {
     p_request_id: requestId,
     p_refund_ref: refundRef ?? "",
     p_actor_id: actorId,

@@ -3,8 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb, serviceDb } from "@/lib/db/server";
 import { getPaymentProvider } from "@/lib/payments";
 import { MOCK_TEST_CARDS, MockGateway } from "@/lib/payments/mock-gateway";
 import { handleWebhook } from "@/lib/payments/process";
@@ -21,21 +20,25 @@ async function appOrigin() {
 export async function startPayment(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireRole("requester");
   const requestId = String(formData.get("requestId") ?? "");
-  const supabase = await createClient();
+  const db = await getDb();
 
   // القراءة بصلاحيات المستخدم (RLS): يضمن أنه عضو في حساب الطلب
-  const { data: order } = await supabase
-    .from("orders")
-    .select(
-      "id, total_paid_halalas, payment_status, service_requests(status, service_types(name_ar))",
-    )
-    .eq("request_id", requestId)
-    .maybeSingle();
-  if (
-    !order ||
-    order.payment_status !== "unpaid" ||
-    order.service_requests?.status !== "awarded_unpaid"
-  ) {
+  const order = await db.maybeOne<{
+    id: string;
+    total_paid_halalas: number;
+    payment_status: string;
+    request_status: string;
+    service_name: string | null;
+  }>(
+    `select o.id, o.total_paid_halalas, o.payment_status,
+            r.status as request_status, t.name_ar as service_name
+     from public.orders o
+     join public.service_requests r on r.id = o.request_id
+     left join public.service_types t on t.id = r.service_type_id
+     where o.request_id = $1`,
+    [requestId],
+  );
+  if (!order || order.payment_status !== "unpaid" || order.request_status !== "awarded_unpaid") {
     return { message: "هذا الطلب غير متاح للدفع." };
   }
 
@@ -45,10 +48,10 @@ export async function startPayment(_prev: FormState, formData: FormData): Promis
     const session = await provider.createCheckout({
       orderId: order.id,
       amountHalalas: order.total_paid_halalas,
-      description: `مُعقّب — ${order.service_requests?.service_types?.name_ar ?? "طلب خدمة"}`,
+      description: `مُعقّب — ${order.service_name ?? "طلب خدمة"}`,
       callbackUrl: `${await appOrigin()}/api/payments/return?request=${requestId}`,
     });
-    const { error } = await createAdminClient().rpc("register_payment_attempt", {
+    const { error } = await serviceDb().rpc("register_payment_attempt", {
       p_order_id: order.id,
       p_gateway: provider.name,
       p_provider_ref: session.providerRef,
@@ -81,12 +84,16 @@ export async function payWithTestCard(_prev: FormState, formData: FormData): Pro
     };
   }
 
-  const { data: payment } = await createAdminClient()
-    .from("payments")
-    .select("amount_halalas, status, orders(request_id)")
-    .eq("gateway", "mock")
-    .eq("provider_ref", ref)
-    .maybeSingle();
+  const payment = await serviceDb().maybeOne<{
+    amount_halalas: number;
+    status: string;
+    request_id: string;
+  }>(
+    `select p.amount_halalas, p.status, o.request_id
+     from public.payments p join public.orders o on o.id = p.order_id
+     where p.gateway = 'mock' and p.provider_ref = $1`,
+    [ref],
+  );
   if (!payment || payment.status !== "initiated")
     return { message: "جلسة الدفع غير صالحة أو منتهية." };
 
@@ -100,5 +107,5 @@ export async function payWithTestCard(_prev: FormState, formData: FormData): Pro
   if (result.status !== 200) return { message: "تعذّر إتمام الدفع التجريبي." };
 
   // الحدث الموقّع طُبّق أعلاه؛ البوابات الحقيقية تعيد المتصفح لمسار /api/payments/return
-  redirect(`/dashboard/requester/requests/${payment.orders?.request_id ?? ""}?payment=return`);
+  redirect(`/dashboard/requester/requests/${payment.request_id}?payment=return`);
 }

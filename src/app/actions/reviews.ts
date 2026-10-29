@@ -3,14 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
 import {
   CONTACT_INFO_MESSAGE,
   CREDENTIALS_MESSAGE,
   containsContactInfo,
   mentionsCredentials,
 } from "@/lib/contact-info";
-import type { Database } from "@/lib/supabase/database.types";
+import type { FunctionArgs } from "@/lib/db/types";
 import type { FormState } from "./auth";
 
 const score = z.coerce
@@ -43,9 +43,9 @@ export async function submitReview(_prev: FormState, formData: FormData): Promis
   if (!user || (user.role !== "requester" && user.role !== "provider"))
     return { message: "غير مصرح." };
   const requestId = String(formData.get("requestId") ?? "");
-  const supabase = await createClient();
+  const db = await getDb();
 
-  let args: Database["public"]["Functions"]["submit_review"]["Args"];
+  let args: FunctionArgs<"submit_review">;
   if (user.role === "requester") {
     const parsed = requesterReview.safeParse({
       speed: formData.get("speed"),
@@ -82,7 +82,7 @@ export async function submitReview(_prev: FormState, formData: FormData): Promis
     };
   }
 
-  const { error } = await supabase.rpc("submit_review", args);
+  const { error } = await db.rpc("submit_review", args);
   if (error) {
     const key = Object.keys(ERRORS).find((k) => error.message.includes(k));
     return { message: key ? ERRORS[key] : "تعذّر حفظ التقييم." };

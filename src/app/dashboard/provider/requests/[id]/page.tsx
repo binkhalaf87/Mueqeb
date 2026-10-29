@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Enums, Tables } from "@/lib/db/types";
 import { getMyProvider } from "@/lib/providers/queries";
 import { formatHalalas, halalasToInput } from "@/lib/money";
 import { timeLeft } from "@/lib/format";
@@ -30,32 +31,60 @@ export default async function ProviderRequestPage({
   const provider = await getMyProvider(user.id);
   if (provider?.verification_status !== "approved") notFound();
 
-  const supabase = await createClient();
-  const { data: request } = await supabase
-    .from("service_requests")
-    .select(
-      "id, mode, city, urgency, description, available_docs, status, bids_deadline, service_types(name_ar, min_fee_halalas, guide_min_halalas, guide_max_halalas)",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const db = await getDb();
+  const request = await db.maybeOne<{
+    id: string;
+    mode: Enums<"request_mode">;
+    city: string;
+    urgency: Enums<"request_urgency">;
+    description: string;
+    available_docs: string[];
+    status: Enums<"request_status">;
+    bids_deadline: string | null;
+    service_types: Pick<
+      Tables<"service_types">,
+      "name_ar" | "min_fee_halalas" | "guide_min_halalas" | "guide_max_halalas"
+    > | null;
+  }>(
+    `select r.id, r.mode, r.city, r.urgency, r.description, r.available_docs, r.status,
+            r.bids_deadline,
+            case when t.id is null then null else json_build_object(
+              'name_ar', t.name_ar, 'min_fee_halalas', t.min_fee_halalas,
+              'guide_min_halalas', t.guide_min_halalas, 'guide_max_halalas', t.guide_max_halalas
+            ) end as service_types
+     from public.service_requests r left join public.service_types t on t.id = r.service_type_id
+     where r.id = $1`,
+    [id],
+  );
   if (!request) notFound();
 
   // عرضي فقط (RLS)، والبيانات الخاصة تظهر فقط إذا رُسي الطلب عليّ (RLS)
-  const [{ data: myBid }, { data: details }, { data: order }, { data: clientStats }] =
-    await Promise.all([
-      supabase.from("bids").select("*").eq("request_id", id).maybeSingle(),
-      supabase.from("request_private_details").select("*").eq("request_id", id).maybeSingle(),
-      // الطلب المالي يظهر للمزوّد المُرسى عليه فقط (RLS)
-      supabase
-        .from("orders")
-        .select(
-          "fee_halalas, provider_commission_bps, provider_commission_halalas, provider_net_halalas, payment_status",
-        )
-        .eq("request_id", id)
-        .maybeSingle(),
-      // سجل العميل بلا هوية: متوسط تقييمه وعدد طلباته المكتملة
-      supabase.rpc("requester_stats_for_request", { p_request_id: id }).single(),
-    ]);
+  const [myBid, details, order, { data: clientStatsRows }] = await Promise.all([
+    db.maybeOne<Tables<"bids">>("select * from public.bids where request_id = $1", [id]),
+    db.maybeOne<Tables<"request_private_details">>(
+      "select * from public.request_private_details where request_id = $1",
+      [id],
+    ),
+    // الطلب المالي يظهر للمزوّد المُرسى عليه فقط (RLS)
+    db.maybeOne<
+      Pick<
+        Tables<"orders">,
+        | "fee_halalas"
+        | "provider_commission_bps"
+        | "provider_commission_halalas"
+        | "provider_net_halalas"
+        | "payment_status"
+      >
+    >(
+      `select fee_halalas, provider_commission_bps, provider_commission_halalas,
+              provider_net_halalas, payment_status
+       from public.orders where request_id = $1`,
+      [id],
+    ),
+    // سجل العميل بلا هوية: متوسط تقييمه وعدد طلباته المكتملة
+    db.rpc("requester_stats_for_request", { p_request_id: id }),
+  ]);
+  const clientStats = clientStatsRows?.[0] ?? null;
 
   const left = timeLeft(request.bids_deadline);
   const canBid =

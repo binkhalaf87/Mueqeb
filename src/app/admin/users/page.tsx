@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db/server";
+import type { Enums } from "@/lib/db/types";
 import { formatDateTime } from "@/lib/format";
 import { ROLE_LABEL, type Role } from "@/lib/auth/routes";
 import { Badge, Card, PageTitle } from "@/components/ui";
@@ -14,20 +15,29 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
   const query = typeof q === "string" ? q.trim().slice(0, 60) : "";
   const roleFilter = role === "requester" || role === "provider" || role === "admin" ? role : "";
 
-  const supabase = await createClient();
-  let builder = supabase
-    .from("profiles")
-    .select(
-      "id, role, full_name, phone, city, created_at, suspended_at, suspension_reason, providers!providers_profile_id_fkey(office_name, verification_status)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (roleFilter) builder = builder.eq("role", roleFilter);
-  if (query) {
-    const safe = query.replace(/[,%()]/g, " ");
-    builder = builder.or(`full_name.ilike.%${safe}%,phone.ilike.%${safe}%`);
-  }
-  const { data: users } = await builder;
+  const db = await getDb();
+  // نمط LIKE آمن: تُهرَّب المحارف الخاصة فيُبحث عن النص كما هو
+  const pattern = query ? `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+  const users = await db.query<{
+    id: string;
+    role: Enums<"user_role"> | null;
+    full_name: string;
+    phone: string | null;
+    city: string | null;
+    created_at: string;
+    suspended_at: string | null;
+    suspension_reason: string | null;
+    office_name: string | null;
+    verification_status: Enums<"provider_verification_status"> | null;
+  }>(
+    `select p.id, p.role, p.full_name, p.phone, p.city, p.created_at, p.suspended_at,
+            p.suspension_reason, pr.office_name, pr.verification_status
+     from public.profiles p left join public.providers pr on pr.profile_id = p.id
+     where ($1::public.user_role is null or p.role = $1)
+       and ($2::text is null or p.full_name ilike $2 or p.phone ilike $2)
+     order by p.created_at desc limit 100`,
+    [roleFilter || null, pattern],
+  );
 
   return (
     <div className="space-y-6">
@@ -72,7 +82,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
       </form>
 
       <Card className="p-0">
-        {!users?.length ? (
+        {!users.length ? (
           <p className="p-6 text-sm text-muted">لا نتائج.</p>
         ) : (
           <ul className="divide-y divide-border" data-testid="users-list">
@@ -81,9 +91,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="font-medium">{u.full_name || "—"}</span>
                   {u.role && <Badge>{ROLE_LABEL[u.role as Role]}</Badge>}
-                  {u.providers?.office_name && (
-                    <span className="text-sm text-muted">{u.providers.office_name}</span>
-                  )}
+                  {u.office_name && <span className="text-sm text-muted">{u.office_name}</span>}
                   {u.suspended_at && <Badge tone="danger">موقوف</Badge>}
                   <span className="text-sm text-muted" dir="ltr">
                     {u.phone ?? ""}

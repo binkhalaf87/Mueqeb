@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb, getSessionUserId } from "@/lib/db/server";
 import { homePathForRole, type Role } from "@/lib/auth/routes";
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, signSession } from "@/lib/auth/token";
-import { sessionVersion } from "@/lib/auth/accounts";
+import { contactStatus, sessionVersion } from "@/lib/auth/accounts";
 
 export type CurrentUser = {
   id: string;
@@ -16,7 +16,12 @@ export type CurrentUser = {
   /** حساب موقوف من الإدارة (مع السبب) */
   suspended: boolean;
   suspensionReason: string | null;
+  /** أكّد بريده (أو جواله) — شرط لنشر الطلبات وتقديم العروض والدفع وطلب التوثيق */
+  contactVerified: boolean;
 };
+
+export const UNVERIFIED_MESSAGE =
+  "أكّد بريدك الإلكتروني أولاً من الرابط المرسل إليك (أو أضف بريداً من «حسابي» إن سجّلت بالجوال).";
 
 /** المستخدم الحالي مع ملفه، أو null. مُخزّن لكل طلب. */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
@@ -39,6 +44,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   );
   // حساب حُذف بعد إصدار الجلسة
   if (!profile) return null;
+  const contact = await contactStatus(id);
 
   return {
     id,
@@ -48,6 +54,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     phone: profile.phone,
     suspended: Boolean(profile.suspended_at),
     suspensionReason: profile.suspension_reason,
+    contactVerified: Boolean(contact?.emailVerified || contact?.phoneVerified),
   };
 });
 

@@ -8,7 +8,7 @@ import {
   roundBps,
 } from "@/lib/payments/amounts";
 import { MOCK_TEST_CARDS, MockGateway, signMockPayload } from "@/lib/payments/mock-gateway";
-import { isProductionDeployment } from "@/lib/payments";
+import { isLiveMode, isProductionDeployment } from "@/lib/payments";
 import { MoyasarGateway } from "@/lib/payments/moyasar";
 import { WebhookVerificationError } from "@/lib/payments/types";
 
@@ -199,6 +199,11 @@ describe("MoyasarGateway (test mode only)", () => {
     expect(() => new MoyasarGateway("sk_test_abc", "")).toThrow();
   });
 
+  it("live mode accepts sk_live_ keys only, and only when explicitly enabled", () => {
+    expect(() => new MoyasarGateway("sk_live_abc", webhookSecret, fetch, true)).not.toThrow();
+    expect(() => new MoyasarGateway("sk_test_abc", webhookSecret, fetch, true)).toThrow(/sk_live_/);
+  });
+
   it("creates a hosted invoice in halalas with basic auth", async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({ id: "inv_123", url: "https://checkout.moyasar.com/invoices/inv_123" }),
@@ -355,5 +360,21 @@ describe("isProductionDeployment (mock gateway guard)", () => {
     expect(isProductionDeployment({ RAILWAY_ENVIRONMENT_NAME: "staging" })).toBe(false);
     expect(isProductionDeployment({ VERCEL_ENV: "preview" })).toBe(false);
     expect(isProductionDeployment({})).toBe(false);
+  });
+});
+
+describe("isLiveMode (real money)", () => {
+  it("is off unless PAYMENTS_LIVE=1", () => {
+    expect(isLiveMode({})).toBe(false);
+    expect(isLiveMode({ RAILWAY_ENVIRONMENT_NAME: "production" })).toBe(false);
+    expect(isLiveMode({ PAYMENTS_LIVE: "true", RAILWAY_ENVIRONMENT_NAME: "production" })).toBe(
+      false,
+    );
+  });
+
+  it("is allowed in production only", () => {
+    expect(isLiveMode({ PAYMENTS_LIVE: "1", RAILWAY_ENVIRONMENT_NAME: "production" })).toBe(true);
+    expect(() => isLiveMode({ PAYMENTS_LIVE: "1" })).toThrow(/الإنتاج/);
+    expect(() => isLiveMode({ PAYMENTS_LIVE: "1", RAILWAY_ENVIRONMENT_NAME: "staging" })).toThrow();
   });
 });

@@ -103,6 +103,12 @@ completed | disputed → resolved
 - الأمان: `tests/integration/security.test.ts` يحوي القوائم المراجَعة لصلاحيات الكتابة ودوال الزائر؛ أي جدول أو صلاحية
   جديدة تتطلب تحديثها عن قصد. حدود المعدل في `src/lib/auth/rate-limit.ts` (`RATE_LIMIT_MULTIPLIER` للاختبارات فقط)،
   والتحقق من المعرّفات في `src/lib/validation.ts`، والأخطاء تُسجَّل بـ `logError` (`src/lib/log.ts`) لا `console.error`.
+- روابط البريد (استعادة كلمة المرور، تأكيد البريد): رموز لمرة واحدة مجزّأة في `auth.one_time_tokens`
+  (`src/lib/auth/one-time-tokens.ts`)، تُرسل مباشرة عبر قناة البريد (`src/lib/auth/account-emails.ts`) لا عبر الإشعارات.
+  نشر الطلب وتقديم العرض والدفع وإرسال التوثيق تتطلب `user.contactVerified` (بريد مؤكَّد أو جوال مؤكَّد).
+  في الاختبارات `EMAIL_LOG_FILE` يكتب الروابط في ملف (لا يُضبط في الإنتاج).
+- الدفع الحي: `PAYMENTS_LIVE=1` + بيئة إنتاج + `sk_live_` معاً (`isLiveMode` في `src/lib/payments`).
+- حساب الإدارة الأول: `npm run admin:create` بمتغيرات `ADMIN_BOOTSTRAP_*` (ويعمل عند بدء Railway).
 - النشر: `docs/deploy.md`.
 - بعد أي migration: `npm run db:reset && npm run seed && npm run db:types` (Postgres محلي: `npm run db:start`).
 - الفحوص: `npm run lint && npm run typecheck && npm run format:check && npm test && npm run build`

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { contactStatus } from "@/lib/auth/accounts";
 import { requireUser } from "@/lib/auth/session";
 import { ROLE_LABEL } from "@/lib/auth/routes";
 import { getDb } from "@/lib/db/server";
@@ -9,8 +10,10 @@ import { EmailForm, EstablishmentForm, PasswordForm, ProfileForm } from "./accou
 
 export const metadata: Metadata = { title: "حسابي" };
 
-export default async function AccountPage() {
+export default async function AccountPage({ searchParams }: PageProps<"/dashboard/account">) {
   const user = await requireUser();
+  const { verified } = await searchParams;
+  const contact = await contactStatus(user.id);
   const db = await getDb();
   const [profile, login, account] = await Promise.all([
     db.one<{ full_name: string; city: string | null }>(
@@ -39,6 +42,11 @@ export default async function AccountPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageTitle subtitle="بياناتك الشخصية، وبيانات منشأتك، وبيانات الدخول.">حسابي</PageTitle>
+      {verified === "1" && (
+        <p role="status" className="rounded-lg bg-primary-soft px-3 py-2 text-sm">
+          تأكّد بريدك الإلكتروني. شكراً لك.
+        </p>
+      )}
 
       <Card className="space-y-4" data-testid="account-profile">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -89,8 +97,22 @@ export default async function AccountPage() {
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-muted">البريد الإلكتروني</dt>
-            <dd dir="ltr" className="text-start" data-testid="login-email">
-              {login.email ?? "—"}
+            <dd className="flex flex-wrap items-center gap-2">
+              <span dir="ltr" data-testid="login-email">
+                {login.email ?? "—"}
+              </span>
+              {login.email && (
+                <span
+                  data-testid="email-status"
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    contact?.emailVerified
+                      ? "bg-primary-soft text-primary"
+                      : "bg-amber-100 text-amber-900"
+                  }`}
+                >
+                  {contact?.emailVerified ? "مؤكَّد" : "غير مؤكَّد"}
+                </span>
+              )}
             </dd>
           </div>
           <div>

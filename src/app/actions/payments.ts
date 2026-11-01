@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth/session";
+import { UNVERIFIED_MESSAGE, requireRole } from "@/lib/auth/session";
 import { getDb, serviceDb } from "@/lib/db/server";
 import { getPaymentProvider } from "@/lib/payments";
 import { MOCK_TEST_CARDS, MockGateway } from "@/lib/payments/mock-gateway";
@@ -22,7 +22,8 @@ async function appOrigin() {
 
 /** يبدأ الدفع: ينشئ جلسة في البوابة ويسجّل المحاولة ثم يحوّل العميل لصفحة البوابة */
 export async function startPayment(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireRole("requester");
+  const user = await requireRole("requester");
+  if (!user.contactVerified) return { message: UNVERIFIED_MESSAGE };
   const requestId = uuidField(formData, "requestId");
   if (!requestId) return { message: INVALID_INPUT_MESSAGE };
   const db = await getDb();

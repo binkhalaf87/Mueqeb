@@ -37,6 +37,8 @@ export const RATE_LIMITS = {
   message: { limit: 20, windowMs: 60_000 }, // لكل مستخدم في الدقيقة
   bid: { limit: 30, windowMs: 10 * 60_000 }, // لكل مزوّد في 10 دقائق
   request: { limit: 10, windowMs: 60 * 60_000 }, // لكل مستخدم في الساعة
+  password_reset: { limit: 5, windowMs: 60 * 60_000 }, // لكل IP ولكل بريد في الساعة
+  verify_email: { limit: 3, windowMs: 60 * 60_000 }, // إعادة إرسال رابط التأكيد لكل مستخدم
 } as const;
 
 export type RateLimitName = keyof typeof RATE_LIMITS;

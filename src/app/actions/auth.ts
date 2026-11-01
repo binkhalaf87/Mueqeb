@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getDb, serviceDb } from "@/lib/db/server";
 import { endSession, getCurrentUser, startSession } from "@/lib/auth/session";
 import { createAccount, verifyCredentials } from "@/lib/auth/accounts";
+import { sendVerificationEmail } from "@/lib/auth/account-emails";
 import {
   clearLoginFailures,
   clientIp,
@@ -49,6 +50,9 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
     return { message: "تعذّر إنشاء الحساب، حاول مرة أخرى.", values };
   }
 
+  if (identifier.kind === "email") {
+    await sendVerificationEmail({ userId: result.userId, email: identifier.email, name: fullName });
+  }
   await startSession(result.userId);
   revalidatePath("/", "layout");
   redirect("/onboarding");

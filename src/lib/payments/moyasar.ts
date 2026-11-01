@@ -9,11 +9,12 @@ import {
 } from "./types";
 
 /**
- * Moyasar (بوابة سعودية) — وضع الاختبار فقط.
+ * Moyasar (بوابة سعودية) — وضع الاختبار افتراضياً.
  * - الدفع عبر فاتورة مستضافة (Invoices API): بيانات البطاقة لا تمر بخوادمنا.
  * - Moyasar توقّع أحداث webhook برمز سري مشترك (secret_token) داخل الحمولة؛
  *   نقارنه بزمن ثابت، ثم يُطبّق الدفع بعد مطابقة المبلغ في قاعدة البيانات.
- * - يرفض أي مفتاح ليس sk_test_.
+ * - يقبل sk_test_ فقط، إلا إذا فُعّل الوضع الحي صراحةً (live) فيقبل sk_live_ فقط.
+ *   قرار التفعيل في getPaymentProvider: PAYMENTS_LIVE=1 وبيئة إنتاج فقط.
  */
 
 const API = "https://api.moyasar.com/v1";
@@ -48,9 +49,16 @@ export class MoyasarGateway implements PaymentProvider {
     private readonly secretKey: string,
     private readonly webhookSecret: string,
     private readonly fetchImpl: typeof fetch = fetch,
+    readonly live = false,
   ) {
-    if (!secretKey?.startsWith("sk_test_")) {
-      throw new Error("وضع الاختبار فقط: MOYASAR_SECRET_KEY يجب أن يبدأ بـ sk_test_");
+    if (live) {
+      if (!secretKey?.startsWith("sk_live_")) {
+        throw new Error("الوضع الحي: MOYASAR_SECRET_KEY يجب أن يبدأ بـ sk_live_");
+      }
+    } else if (!secretKey?.startsWith("sk_test_")) {
+      throw new Error(
+        "وضع الاختبار: MOYASAR_SECRET_KEY يجب أن يبدأ بـ sk_test_ (الحي يتطلب PAYMENTS_LIVE=1)",
+      );
     }
     if (!webhookSecret || webhookSecret.length < 16) {
       throw new Error("MOYASAR_WEBHOOK_SECRET مطلوب (16 حرفاً على الأقل)");

@@ -38,7 +38,7 @@ export const identifierSchema = z
     return { kind: "phone", phone };
   });
 
-const passwordSchema = z
+export const passwordSchema = z
   .string()
   .min(8, "كلمة المرور 8 أحرف على الأقل")
   .max(72, "كلمة المرور طويلة جداً");

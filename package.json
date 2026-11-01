@@ -18,7 +18,8 @@
     "db:reset": "tsx scripts/db-reset.ts",
     "db:types": "tsx scripts/gen-types.ts && prettier --write src/lib/db/types.ts",
     "seed": "tsx scripts/seed.ts",
-    "start:railway": "npm run db:migrate && { if [ \"$SEED_ON_START\" = \"1\" ]; then npm run seed || echo \"seed failed\"; fi; } && next start"
+    "admin:create": "tsx scripts/create-admin.ts",
+    "start:railway": "npm run db:migrate && { if [ \"$SEED_ON_START\" = \"1\" ]; then npm run seed || echo \"seed failed\"; fi; } && { if [ -n \"$ADMIN_BOOTSTRAP_EMAIL\" ]; then npm run admin:create || echo \"admin bootstrap failed\"; fi; } && next start"
   },
   "dependencies": {
     "dotenv": "^18.0.9",

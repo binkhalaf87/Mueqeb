@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { logIn, signUp, uniqueCr, uniqueEmail } from "./helpers";
+import { logIn, signUp, uniqueCr, uniqueEmail, verifyEmail } from "./helpers";
 
 const pdf = (name: string) => ({
   name: `${name}.pdf`,
@@ -16,10 +16,12 @@ const DOCS = [
 
 /** ينشئ مزوّداً جديداً، يكمل ملفه ومستنداته وخدمة واحدة، ويرسله للتوثيق */
 async function createSubmittedProvider(page: Page, officeName: string, city: string) {
-  await signUp(page, uniqueEmail(), "مسؤول المكتب");
+  const email = uniqueEmail();
+  await signUp(page, email, "مسؤول المكتب");
   await page.getByText("أقدّم خدمة").click();
   await page.getByRole("button", { name: "متابعة" }).click();
   await expect(page).toHaveURL(/\/dashboard\/provider$/);
+  await verifyEmail(page, email);
 
   await page.goto("/dashboard/provider/profile");
   await page.getByLabel("اسم المكتب").fill(officeName);

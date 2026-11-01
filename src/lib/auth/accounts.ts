@@ -117,13 +117,66 @@ export async function changeEmail(
   db: Db = dbFor(SERVICE),
 ): Promise<{ ok: true } | { ok: false; reason: "exists" }> {
   try {
-    await db.query("update auth.users set email = $2, updated_at = now() where id = $1", [
-      userId,
-      email.toLowerCase(),
-    ]);
+    // البريد الجديد غير مؤكَّد حتى يُفتح رابط التحقق المرسل إليه
+    await db.query(
+      `update auth.users
+       set email = $2, updated_at = now(),
+           email_verified_at = case when email = $2 then email_verified_at end
+       where id = $1`,
+      [userId, email.toLowerCase()],
+    );
     return { ok: true };
   } catch (error) {
     if ((error as { code?: string }).code === "23505") return { ok: false, reason: "exists" };
     throw error;
   }
+}
+
+export type ContactStatus = {
+  email: string | null;
+  emailVerified: boolean;
+  phone: string | null;
+  phoneVerified: boolean;
+};
+
+/** حالة التحقق من وسائل التواصل؛ الحساب «موثّق التواصل» إن تأكدت إحداهما */
+export async function contactStatus(
+  userId: string,
+  db: Db = dbFor(SERVICE),
+): Promise<ContactStatus | null> {
+  const row = await db.maybeOne<{
+    email: string | null;
+    phone: string | null;
+    email_verified_at: string | null;
+    phone_verified_at: string | null;
+  }>("select email, phone, email_verified_at, phone_verified_at from auth.users where id = $1", [
+    userId,
+  ]);
+  if (!row) return null;
+  return {
+    email: row.email,
+    emailVerified: Boolean(row.email && row.email_verified_at),
+    phone: row.phone,
+    phoneVerified: Boolean(row.phone && row.phone_verified_at),
+  };
+}
+
+/** يؤكد البريد إن كان ما زال هو البريد الذي أُرسل إليه الرابط */
+export async function markEmailVerified(userId: string, email: string, db: Db = dbFor(SERVICE)) {
+  const rows = await db.query(
+    `update auth.users set email_verified_at = coalesce(email_verified_at, now())
+     where id = $1 and email = $2 returning id`,
+    [userId, email],
+  );
+  return rows.length > 0;
+}
+
+/** الحساب المرتبط ببريد (لاستعادة كلمة المرور) مع اسم صاحبه */
+export async function accountByEmail(email: string, db: Db = dbFor(SERVICE)) {
+  return db.maybeOne<{ id: string; email: string; full_name: string }>(
+    `select u.id, u.email, coalesce(p.full_name, '') as full_name
+     from auth.users u left join public.profiles p on p.id = u.id
+     where u.email = $1`,
+    [email.toLowerCase()],
+  );
 }

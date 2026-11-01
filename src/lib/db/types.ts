@@ -452,6 +452,7 @@ export type Database = {
       current_provider_is_approved: { Args: Record<string, never>; Returns: boolean };
       current_user_email: { Args: Record<string, never>; Returns: string };
       expire_stale_requests: { Args: Record<string, never>; Returns: number };
+      expire_unpaid_awards: { Args: Record<string, never>; Returns: number };
       format_sar: { Args: { p_halalas: number }; Returns: string };
       int_setting: { Args: { p_key: string }; Returns: number };
       is_account_member: { Args: { p_account_id: string }; Returns: boolean };

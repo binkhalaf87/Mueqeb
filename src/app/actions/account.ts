@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser, startSession } from "@/lib/auth/session";
 import { changeEmail, changePassword, verifyPasswordById } from "@/lib/auth/accounts";
+import { sendVerificationEmail } from "@/lib/auth/account-emails";
 import { clearLoginFailures, isLoginBlocked, recordLoginFailure } from "@/lib/auth/rate-limit";
 import { fieldErrors } from "@/lib/auth/validation";
 import { attempt } from "@/lib/db/core";
@@ -115,8 +116,16 @@ export async function changeLoginEmail(_prev: FormState, formData: FormData): Pr
 
   const result = await changeEmail(user.id, parsed.data.email);
   if (!result.ok) return { errors: { email: "هذا البريد مستخدم لحساب آخر." }, values };
+  if (parsed.data.email !== user.email) {
+    await sendVerificationEmail({ userId: user.id, email: parsed.data.email, name: user.fullName });
+  }
   revalidatePath("/", "layout");
-  return { message: "تغيّر بريد الدخول. استخدمه في المرة القادمة." };
+  return {
+    message:
+      parsed.data.email === user.email
+        ? "لم يتغيّر بريد الدخول."
+        : "تغيّر بريد الدخول. أرسلنا إليه رابط تأكيد؛ افتحه لتفعيل البريد الجديد.",
+  };
 }
 
 const passwordSchema = z

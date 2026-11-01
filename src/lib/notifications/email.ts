@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import type { DeliveryResult, NotificationChannel, OutgoingNotification } from "./types";
 
 function escapeHtml(text: string) {
@@ -26,6 +27,14 @@ export class LogEmailChannel implements NotificationChannel {
     if (!n.recipient.email) return { status: "skipped", reason: "no_email" };
     this.sent.push(n);
     if (process.env.NODE_ENV !== "test") console.info(`[email:log] ${n.kind}`);
+    // للتطوير والاختبارات الآلية فقط: ملف يحوي الروابط (ومنها روابط سرية). لا يُضبط أبداً في الإنتاج
+    const file = process.env.EMAIL_LOG_FILE;
+    if (file) {
+      appendFileSync(
+        /*turbopackIgnore: true*/ file,
+        `${JSON.stringify({ to: n.recipient.email, kind: n.kind, url: n.url })}\n`,
+      );
+    }
     return { status: "sent" };
   }
 }

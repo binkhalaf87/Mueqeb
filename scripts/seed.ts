@@ -176,6 +176,14 @@ function identifierOf(user: { email?: string; phone?: string }) {
 
 async function seedUser(user: SeedUser) {
   const created = await createAccount(identifierOf(user), SEED_PASSWORD, user.fullName, service);
+  // حسابات seed مؤكَّدة التواصل (بديل رابط البريد ورسالة الجوال)
+  await service.query(
+    `update auth.users
+     set email_verified_at = case when email is not null then coalesce(email_verified_at, now()) end,
+         phone_verified_at = case when phone is not null then coalesce(phone_verified_at, now()) end
+     where email = $1 or phone = $2`,
+    [user.email ?? null, user.phone ?? null],
+  );
   if (!created.ok) {
     console.log(`• ${user.label}: موجود مسبقاً`);
     return;

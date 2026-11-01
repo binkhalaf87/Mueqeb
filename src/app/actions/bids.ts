@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/session";
+import { UNVERIFIED_MESSAGE, requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/server";
 import { fieldErrors } from "@/lib/auth/validation";
 import { formatHalalas } from "@/lib/money";
@@ -13,6 +13,7 @@ import type { FormState } from "./auth";
 
 export async function submitBid(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireRole("provider");
+  if (!user.contactVerified) return { message: UNVERIFIED_MESSAGE };
   const parsed = bidSchema.safeParse({
     requestId: formData.get("requestId"),
     fee: formData.get("fee") ?? "",

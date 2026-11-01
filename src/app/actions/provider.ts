@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/session";
+import { UNVERIFIED_MESSAGE, requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/server";
 import { attempt } from "@/lib/db/core";
 import { removeObjects, uploadObject } from "@/lib/storage";
@@ -170,7 +170,8 @@ const SUBMIT_ERRORS: Record<string, string> = {
 };
 
 export async function submitProviderForReview(): Promise<FormState> {
-  await requireRole("provider");
+  const user = await requireRole("provider");
+  if (!user.contactVerified) return { message: UNVERIFIED_MESSAGE };
   const db = await getDb();
   const { error } = await db.rpc("submit_provider_for_review");
   if (error) {

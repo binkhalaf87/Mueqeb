@@ -17,6 +17,18 @@ export function isProductionDeployment(env: Record<string, string | undefined> =
   return env.VERCEL_ENV === "production" || railway === "production";
 }
 
+/**
+ * الوضع الحي (مبالغ حقيقية) لا يُفعَّل إلا بقرار صريح PAYMENTS_LIVE=1 وفي بيئة الإنتاج فقط؛
+ * طلبه خارج الإنتاج خطأ صريح بدل التراجع بصمت لوضع الاختبار.
+ */
+export function isLiveMode(env: Record<string, string | undefined> = process.env) {
+  if (env.PAYMENTS_LIVE !== "1") return false;
+  if (!isProductionDeployment(env)) {
+    throw new Error("PAYMENTS_LIVE=1 مسموح في بيئة الإنتاج فقط");
+  }
+  return true;
+}
+
 export function getPaymentProvider(): PaymentProvider {
   if (cached) return cached;
   const name = process.env.PAYMENT_PROVIDER ?? "mock";
@@ -24,6 +36,8 @@ export function getPaymentProvider(): PaymentProvider {
     cached = new MoyasarGateway(
       process.env.MOYASAR_SECRET_KEY ?? "",
       process.env.MOYASAR_WEBHOOK_SECRET ?? "",
+      fetch,
+      isLiveMode(),
     );
   } else if (name === "mock") {
     if (isProductionDeployment() && process.env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION !== "1") {

@@ -1,6 +1,11 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
+
+// رسائل البريد (روابط التأكيد والاستعادة) تُكتب في ملف تقرؤه الاختبارات؛ للاختبارات فقط
+process.env.EMAIL_LOG_FILE ??= join(tmpdir(), `mueqeb-e2e-emails-${PORT}.jsonl`);
 
 /**
  * يتطلب Postgres محلياً مع بيانات seed: npm run db:start && npm run seed
@@ -33,6 +38,6 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
     // كل الاختبارات من عنوان IP واحد: نرفع حدود المعدل (لا يُضبط هذا أبداً في الإنتاج)
-    env: { RATE_LIMIT_MULTIPLIER: "100" },
+    env: { RATE_LIMIT_MULTIPLIER: "100", EMAIL_LOG_FILE: process.env.EMAIL_LOG_FILE },
   },
 });

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { accept, as, expectLedgerBalanced } from "./flows";
-import { signUp, uniqueCr, uniqueEmail } from "./helpers";
+import { signUp, uniqueCr, uniqueEmail, verifyEmail } from "./helpers";
 
 /**
  * معيار قبول المرحلة 8: المسار الكامل آلياً —
@@ -40,13 +40,17 @@ test("المسار الكامل: من تسجيل المنشأة حتى صرف م
 
   // 1) تسجيل منشأة جديدة
   const requester = await (await browser.newContext()).newPage();
-  await signUp(requester, uniqueEmail(), "سعد العتيبي");
+  const email = uniqueEmail();
+  await signUp(requester, email, "سعد العتيبي");
   await requester.getByText("أطلب خدمة").click();
   await requester.getByText("منشأة", { exact: true }).click();
   await requester.getByLabel("اسم المنشأة").fill(establishment);
   await requester.getByLabel("رقم السجل التجاري").fill(uniqueCr());
   await requester.getByRole("button", { name: "متابعة" }).click();
   await expect(requester).toHaveURL(/\/dashboard\/requester$/);
+  // تأكيد البريد من الرابط المرسل (شرط لنشر الطلب والدفع)
+  await expect(requester.getByTestId("verify-email-banner")).toBeVisible();
+  await verifyEmail(requester, email);
 
   // 2) طلب عام
   await requester.goto("/dashboard/requester/requests/new");

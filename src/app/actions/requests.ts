@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth/session";
+import { UNVERIFIED_MESSAGE, requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/server";
 import { refundPayment } from "@/lib/payments/process";
 import { cancelInProgress } from "@/lib/execution/cancel";
@@ -21,6 +21,7 @@ function revalidateRequestPages() {
 
 export async function createRequest(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireRole("requester");
+  if (!user.contactVerified) return { message: UNVERIFIED_MESSAGE };
   const parsed = createRequestSchema.safeParse({
     mode: formData.get("mode"),
     accountId: formData.get("accountId"),

@@ -17,7 +17,7 @@ const securityHeaders = [
       "object-src 'none'",
       "base-uri 'self'",
       // صفحة الدفع المستضافة لدى Moyasar قد تُفتح بعد إرسال نموذج الدفع
-      "form-action 'self' https://*.moyasar.com",
+      "form-action 'self' https://*.moyasar.com https://ksa.paymob.com",
       "frame-ancestors 'none'",
     ].join("; "),
   },

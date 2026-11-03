@@ -1,6 +1,6 @@
 /** واجهة بوابة الدفع المجردة: كل بوابة (Moyasar، بوابة الاختبار المحلية…) تطبّقها */
 
-export type GatewayName = "moyasar" | "mock";
+export type GatewayName = "moyasar" | "paymob" | "mock";
 
 export type CheckoutInput = {
   orderId: string;
@@ -8,6 +8,8 @@ export type CheckoutInput = {
   description: string;
   /** عنوان يعود إليه العميل بعد الدفع */
   callbackUrl: string;
+  /** بيانات الفوترة التي تطلبها بعض البوابات (Paymob) */
+  customer?: { name: string; email: string | null; phone: string | null };
 };
 
 export type CheckoutSession = {
@@ -31,11 +33,14 @@ export type RefundResult = { refundRef: string; raw: unknown };
 
 export class WebhookVerificationError extends Error {}
 
+/** حدث موثّق لكنه لا يخصنا أو لا يتطلب إجراءً (معلّق، أو من تطبيق آخر على الحساب نفسه) */
+export class IgnoredWebhookEvent extends Error {}
+
 export interface PaymentProvider {
   readonly name: GatewayName;
   createCheckout(input: CheckoutInput): Promise<CheckoutSession>;
   /** يتحقق من التوقيع ويعيد الحدث، أو يرمي WebhookVerificationError */
-  verifyWebhook(rawBody: string, headers: Headers): Promise<PaymentEvent>;
+  verifyWebhook(rawBody: string, headers: Headers, url?: URL): Promise<PaymentEvent>;
   /** يستعلم من البوابة مباشرة عن حالة الدفع (null إن لم تدعمه) */
   fetchPayment(providerRef: string): Promise<PaymentEvent | null>;
   /** استرداد كامل؛ يرمي عند الفشل */

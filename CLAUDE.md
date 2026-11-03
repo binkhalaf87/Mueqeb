@@ -107,7 +107,10 @@ completed | disputed → resolved
   (`src/lib/auth/one-time-tokens.ts`)، تُرسل مباشرة عبر قناة البريد (`src/lib/auth/account-emails.ts`) لا عبر الإشعارات.
   نشر الطلب وتقديم العرض والدفع وإرسال التوثيق تتطلب `user.contactVerified` (بريد مؤكَّد أو جوال مؤكَّد).
   في الاختبارات `EMAIL_LOG_FILE` يكتب الروابط في ملف (لا يُضبط في الإنتاج).
-- الدفع الحي: `PAYMENTS_LIVE=1` + بيئة إنتاج + `sk_live_` معاً (`isLiveMode` في `src/lib/payments`).
+- بوابات الدفع: `mock` محلياً، و`moyasar`، و`paymob` (`src/lib/payments/paymob.ts`: Intention API + Unified Checkout،
+  webhook بتوقيع HMAC-SHA512 في `?hmac=`، ومرجع كل محاولة يبدأ بـ `mq_` لتمييز معاملاتنا في حساب Paymob المشترك مع JobAI).
+- الدفع الحي: `PAYMENTS_LIVE=1` + بيئة إنتاج + مفتاح حي (`sk_live_` لميسر، `sau_sk_live_` لـ Paymob) معاً
+  (`isLiveMode` في `src/lib/payments`).
 - حساب الإدارة الأول: `npm run admin:create` بمتغيرات `ADMIN_BOOTSTRAP_*` (ويعمل عند بدء Railway).
 - النشر: `docs/deploy.md`.
 - بعد أي migration: `npm run db:reset && npm run seed && npm run db:types` (Postgres محلي: `npm run db:start`).

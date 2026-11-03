@@ -56,6 +56,7 @@ export async function startPayment(_prev: FormState, formData: FormData): Promis
       amountHalalas: order.total_paid_halalas,
       description: `مُعقّب — ${order.service_name ?? "طلب خدمة"}`,
       callbackUrl: `${await appOrigin()}/api/payments/return?request=${requestId}`,
+      customer: { name: user.fullName, email: user.email, phone: user.phone },
     });
     const { error } = await serviceDb().rpc("register_payment_attempt", {
       p_order_id: order.id,

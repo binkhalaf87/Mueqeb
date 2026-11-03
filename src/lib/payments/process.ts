@@ -2,7 +2,7 @@ import "server-only";
 import { serviceDb } from "@/lib/db/server";
 import type { Tables } from "@/lib/db/types";
 import { getPaymentProvider } from "./index";
-import { WebhookVerificationError, type PaymentEvent } from "./types";
+import { IgnoredWebhookEvent, WebhookVerificationError, type PaymentEvent } from "./types";
 import { logError } from "@/lib/log";
 
 export type PaymentOutcome = "processed" | "duplicate" | "ignored" | "failed" | "refund_required";
@@ -59,12 +59,15 @@ export async function applyPaymentEvent(event: PaymentEvent): Promise<PaymentOut
 }
 
 /** يتحقق من webhook ويطبّقه. يُستخدم في مسار API وفي بوابة الاختبار المحلية. */
-export async function handleWebhook(rawBody: string, headers: Headers) {
+export async function handleWebhook(rawBody: string, headers: Headers, url?: URL) {
   try {
-    const event = await getPaymentProvider().verifyWebhook(rawBody, headers);
+    const event = await getPaymentProvider().verifyWebhook(rawBody, headers, url);
     const outcome = await applyPaymentEvent(event);
     return { status: 200, body: { received: true, outcome } };
   } catch (err) {
+    if (err instanceof IgnoredWebhookEvent) {
+      return { status: 200, body: { received: true, outcome: "ignored" } };
+    }
     if (err instanceof WebhookVerificationError) {
       return { status: 401, body: { error: "invalid signature" } };
     }

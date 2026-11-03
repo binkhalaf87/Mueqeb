@@ -1,6 +1,7 @@
 import "server-only";
 import { MockGateway } from "./mock-gateway";
 import { MoyasarGateway } from "./moyasar";
+import { PaymobGateway } from "./paymob";
 import type { PaymentProvider } from "./types";
 
 let cached: PaymentProvider | undefined;
@@ -8,6 +9,7 @@ let cached: PaymentProvider | undefined;
 /**
  * البوابة المهيأة من البيئة (وضع الاختبار فقط):
  * PAYMENT_PROVIDER=moyasar (MOYASAR_SECRET_KEY=sk_test_…, MOYASAR_WEBHOOK_SECRET)
+ * PAYMENT_PROVIDER=paymob  (PAYMOB_API_KEY=sau_sk_test_…, PAYMOB_PUBLIC_KEY، PAYMOB_INTEGRATION_ID، PAYMOB_HMAC_SECRET)
  * PAYMENT_PROVIDER=mock    (MOCK_PAYMENT_WEBHOOK_SECRET) — الافتراضي محلياً
  * بوابة الاختبار مرفوضة في بيئة الإنتاج (Railway أو Vercel) إلا بموافقة صريحة لنسخة عرض تجريبية:
  * ALLOW_MOCK_PAYMENTS_IN_PRODUCTION=1
@@ -36,6 +38,21 @@ export function getPaymentProvider(): PaymentProvider {
     cached = new MoyasarGateway(
       process.env.MOYASAR_SECRET_KEY ?? "",
       process.env.MOYASAR_WEBHOOK_SECRET ?? "",
+      fetch,
+      isLiveMode(),
+    );
+  } else if (name === "paymob") {
+    cached = new PaymobGateway(
+      {
+        secretKey: process.env.PAYMOB_API_KEY ?? "",
+        publicKey: process.env.PAYMOB_PUBLIC_KEY ?? "",
+        integrationIds: (process.env.PAYMOB_INTEGRATION_ID ?? "")
+          .split(",")
+          .map((v) => v.trim())
+          .filter(Boolean)
+          .map(Number),
+        hmacSecret: process.env.PAYMOB_HMAC_SECRET ?? "",
+      },
       fetch,
       isLiveMode(),
     );

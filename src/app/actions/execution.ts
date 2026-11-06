@@ -100,6 +100,72 @@ export async function startExecution(_prev: FormState, formData: FormData): Prom
   return { message: "بدأ التنفيذ." };
 }
 
+const withdrawalSchema = z
+  .string()
+  .trim()
+  .min(5, "اكتب سبب الاعتذار (5 أحرف على الأقل).")
+  .max(500, "السبب 500 حرف كحد أقصى.")
+  .refine((v) => !mentionsCredentials(v), CREDENTIALS_MESSAGE);
+
+/**
+ * اعتذار المكتب عن طلب مُرسى عليه: استرداد كامل للعميل من البوابة أولاً (إن كان مدفوعاً)،
+ * ثم التسوية والإلغاء وتسجيل الاعتذار في معاملة واحدة. لا يُلغى الطلب إذا فشل الاسترداد.
+ */
+export async function withdrawFromRequest(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const requestId = requestIdOf(formData);
+  if (!requestId) return { message: INVALID_INPUT_MESSAGE };
+  const user = await requireRole("provider");
+  const parsed = withdrawalSchema.safeParse(formData.get("reason") ?? "");
+  if (!parsed.success) {
+    return { errors: { reason: parsed.error.issues[0].message } };
+  }
+
+  // بصلاحيات المكتب (RLS): يرى الطلب المالي فقط إن كان مُرسى عليه
+  const db = await getDb();
+  const order = await db.maybeOne<{
+    id: string;
+    payment_status: string;
+    total_paid_halalas: number;
+  }>(
+    `select o.id, o.payment_status, o.total_paid_halalas
+     from public.orders o
+     join public.service_requests r on r.id = o.request_id
+     where o.request_id = $1
+       and r.status in ('awarded_unpaid', 'paid', 'awaiting_client', 'in_progress')
+       and public.is_awarded_provider(r.id)`,
+    [requestId],
+  );
+  if (!order) return { message: EXECUTION_ERRORS.invalid_status };
+
+  let refundRef: string | null = null;
+  if (order.payment_status === "paid") {
+    try {
+      refundRef = await refundAtGateway(order.id, order.total_paid_halalas);
+    } catch (err) {
+      logError("provider withdrawal refund", err);
+      return { message: "تعذّر الاسترداد للعميل من بوابة الدفع؛ لم يُلغَ الطلب. حاول لاحقاً." };
+    }
+  }
+
+  const { error } = await serviceDb().rpc("provider_withdraw", {
+    p_request_id: requestId,
+    p_reason: parsed.data,
+    p_refund_ref: refundRef ?? "",
+    p_actor_id: user.id,
+  });
+  if (error) {
+    if (refundRef) logError("provider withdrawal (after gateway refund)", error);
+    return {
+      message: refundRef ? "حدث خطأ بعد الاسترداد؛ أُبلغت الإدارة." : message(error),
+    };
+  }
+  revalidateAll();
+  return { message: "سُجّل اعتذارك وأُلغي الطلب، واستُرد للعميل كامل المبلغ." };
+}
+
 export async function submitDelivery(_prev: FormState, formData: FormData): Promise<FormState> {
   const requestId = requestIdOf(formData);
   if (!requestId) return { message: INVALID_INPUT_MESSAGE };

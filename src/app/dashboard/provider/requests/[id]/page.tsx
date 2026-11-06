@@ -14,6 +14,7 @@ import { RequestStatusBadge } from "@/components/request-status-badge";
 import { Badge, Card, PageTitle } from "@/components/ui";
 import { BidForm } from "./bid-form";
 import { ProviderExecutionPanel } from "./execution-panel";
+import { WithdrawForm } from "./withdraw-form";
 import { ReviewsSection } from "@/components/reviews-section";
 import { Chat } from "@/components/chat";
 import { getThreadMessages } from "@/lib/execution/queries";
@@ -195,6 +196,11 @@ export default async function ProviderRequestPage({
       )}
 
       {awardedToMe && <ProviderExecutionPanel requestId={request.id} />}
+      {awardedToMe &&
+        order &&
+        ["awarded_unpaid", "paid", "awaiting_client", "in_progress"].includes(request.status) && (
+          <WithdrawForm requestId={request.id} paid={order.payment_status === "paid"} />
+        )}
       {awardedToMe && <ReviewsSection requestId={request.id} role="provider" />}
 
       {myBid && (

@@ -240,6 +240,16 @@ export type Database = {
           updated_at: string;
         };
       };
+      provider_withdrawals: {
+        Row: {
+          request_id: string;
+          provider_id: string;
+          reason: string;
+          from_status: Database["public"]["Enums"]["request_status"];
+          refunded_halalas: number;
+          created_at: string;
+        };
+      };
       providers: {
         Row: {
           id: string;
@@ -577,6 +587,10 @@ export type Database = {
           avg_response_minutes: number;
           dispute_pct: number;
         }[];
+      };
+      provider_withdraw: {
+        Args: { p_request_id: string; p_reason: string; p_refund_ref: string; p_actor_id: string };
+        Returns: number;
       };
       public_provider: {
         Args: { p_provider_id: string };

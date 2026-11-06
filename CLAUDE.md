@@ -93,6 +93,9 @@ completed | disputed → resolved
 - المحادثة: استطلاع كل 3 ثوانٍ عبر `/api/messages` (يقرأ بهوية المستخدم فيقصره RLS على أطراف الخيط).
 - المهام المجدولة: تُعلن بـ `cron.schedule()` في الـ migrations ويشغّلها `src/lib/scheduler.ts` من
   `src/instrumentation.ts` (قفل استشاري يمنع التشغيل المزدوج؛ `SCHEDULER=off` لتعطيله).
+- اعتذار المكتب: `withdrawFromRequest` (Server Action) يسترد كامل المبلغ من البوابة أولاً ثم يستدعي
+  `provider_withdraw` (تسوية `provider_withdrawal` + إلغاء + سجل في `provider_withdrawals` + إشعار العميل) في معاملة واحدة.
+  متاح للمكتب المُرسى عليه من الترسية حتى قبل التسليم.
 - آلة الحالات: `transition_request` (يحدد المنفّذ من الجلسة) و`transition_request_as` (داخلية بمنفّذ صريح).
   أي إغلاق لطلب مدفوع يتطلب تسوية الضمان أولاً (`settle_order_ledger`).
 - لوحة الإدارة: كل رقم مالي من الدفتر عبر `admin_kpis` و`ledger_account_balances`؛ كل تغيير إداري يُسجَّل

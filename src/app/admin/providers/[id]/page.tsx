@@ -7,6 +7,7 @@ import type { Tables } from "@/lib/db/types";
 import { getProviderDocuments } from "@/lib/providers/queries";
 import { DOCUMENT_TYPES, providerStage } from "@/lib/providers/constants";
 import { formatHalalas } from "@/lib/money";
+import { formatDateTime } from "@/lib/format";
 import { ProviderStageBadge } from "@/components/provider-stage-badge";
 import { Card, PageTitle } from "@/components/ui";
 import { ReviewActions } from "./review-actions";
@@ -30,7 +31,7 @@ export default async function AdminProviderPage({ params }: PageProps<"/admin/pr
   );
   if (!provider) notFound();
 
-  const [documents, services] = await Promise.all([
+  const [documents, services, withdrawals] = await Promise.all([
     getProviderDocuments(provider.id),
     db.query<
       Pick<Tables<"provider_services">, "id" | "fee_halalas" | "duration_days" | "active"> & {
@@ -42,6 +43,21 @@ export default async function AdminProviderPage({ params }: PageProps<"/admin/pr
                 as service_types
        from public.provider_services s left join public.service_types t on t.id = s.service_type_id
        where s.provider_id = $1`,
+      [provider.id],
+    ),
+    db.query<{
+      request_id: string;
+      reason: string;
+      refunded_halalas: number;
+      created_at: string;
+      service_name: string | null;
+    }>(
+      `select w.request_id, w.reason, w.refunded_halalas, w.created_at, t.name_ar as service_name
+       from public.provider_withdrawals w
+       join public.service_requests r on r.id = w.request_id
+       left join public.service_types t on t.id = r.service_type_id
+       where w.provider_id = $1
+       order by w.created_at desc`,
       [provider.id],
     ),
   ]);
@@ -127,6 +143,27 @@ export default async function AdminProviderPage({ params }: PageProps<"/admin/pr
                 </li>
               ))}
             </ul>
+          </Card>
+
+          <Card data-testid="provider-withdrawals">
+            <h2 className="mb-3 font-semibold">
+              الاعتذارات عن طلبات مُرساة ({withdrawals.length})
+            </h2>
+            {!withdrawals.length ? (
+              <p className="text-sm text-muted">لا توجد اعتذارات.</p>
+            ) : (
+              <ul className="divide-y divide-border text-sm">
+                {withdrawals.map((w) => (
+                  <li key={w.request_id} className="space-y-1 py-2">
+                    <p className="font-medium">
+                      {w.service_name ?? "طلب"} · {formatDateTime(w.created_at)}
+                      {w.refunded_halalas > 0 && ` · استُرد ${formatHalalas(w.refunded_halalas)}`}
+                    </p>
+                    <p className="text-muted">{w.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
 

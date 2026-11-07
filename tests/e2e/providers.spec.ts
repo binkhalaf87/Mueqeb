@@ -40,11 +40,13 @@ async function createSubmittedProvider(page: Page, officeName: string, city: str
 
   await page.goto("/dashboard/provider/services");
   await page.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخصة عمل" });
-  await expect(page.getByTestId("fee-guide")).toContainText("100 ر.س");
-  await page.getByLabel("الأتعاب «يبدأ من» (ريال)").fill("50");
+  // لا حد أدنى للأتعاب: يظهر النطاق الاسترشادي فقط، ويُقبل أي سعر موجب
+  await expect(page.getByTestId("fee-guide")).toContainText("النطاق الاسترشادي: 150 ر.س – 300 ر.س");
+  await expect(page.getByTestId("fee-guide")).not.toContainText("الحد الأدنى");
+  await page.getByLabel("الأتعاب «يبدأ من» (ريال)").fill("0");
   await page.getByLabel("المدة المتوقعة (أيام)").fill("3");
   await page.getByRole("button", { name: "إضافة الخدمة" }).click();
-  await expect(page.getByText("الحد الأدنى لأتعاب هذه الخدمة 100 ر.س")).toBeVisible();
+  await expect(page.getByText("أدخل مبلغاً صحيحاً بالريال")).toBeVisible();
   // القيم تبقى بعد خطأ التحقق
   await expect(page.getByLabel("المدة المتوقعة (أيام)")).toHaveValue("3");
   await page.getByLabel("الأتعاب «يبدأ من» (ريال)").fill("175.5");

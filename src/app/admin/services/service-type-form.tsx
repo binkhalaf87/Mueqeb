@@ -68,6 +68,7 @@ export function ServiceTypeForm({
           name="minFee"
           id={`${p}min`}
           dir="ltr"
+          hint="0 أو فارغ = بلا حد أدنى"
           defaultValue={initial?.minFee}
           error={state.errors?.minFee}
         />

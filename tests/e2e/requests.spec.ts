@@ -12,20 +12,12 @@ async function as(browser: Browser, identifier: string) {
   return page;
 }
 
-async function providerBids(page: Page, description: string, fee: string, belowMin = false) {
+async function providerBids(page: Page, description: string, fee: string) {
   await page.goto("/dashboard/provider/requests");
   await page.getByRole("link", { name: new RegExp(description) }).click();
   await expect(page).toHaveURL(/\/dashboard\/provider\/requests\/[0-9a-f-]{36}$/);
   // لا بيانات عميل قبل الترسية
   await expect(page.getByTestId("client-details")).toHaveCount(0);
-
-  if (belowMin) {
-    await page.getByLabel("أتعابك (ريال)").fill("50");
-    await page.getByLabel("المدة (أيام)").fill("3");
-    await page.getByLabel("ما يشمله العرض").fill("إصدار الرخص ومتابعتها");
-    await page.getByRole("button", { name: "قدّم العرض" }).click();
-    await expect(page.getByText("الحد الأدنى لأتعاب هذه الخدمة 100 ر.س")).toBeVisible();
-  }
 
   await page.getByLabel("أتعابك (ريال)").fill(fee);
   await page.getByLabel("المدة (أيام)").fill("3");
@@ -63,7 +55,7 @@ test("معيار القبول: طلب عام من منشأة، 3 عروض مغل
   const p1 = await as(browser, "provider1@mueqeb.test");
   const p3 = await as(browser, "provider3@mueqeb.test");
   const p4 = await as(browser, "provider4@mueqeb.test");
-  await providerBids(p1, description, fees.p1, true);
+  await providerBids(p1, description, fees.p1);
   await providerBids(p3, description, fees.p3);
   await providerBids(p4, description, fees.p4);
 

@@ -52,8 +52,11 @@ export default async function ServicesAdminPage() {
                     <span className="font-medium">{t.name_ar}</span>
                     {!t.active && <Badge>موقوفة</Badge>}
                     <span className="text-muted">
-                      الحد الأدنى {formatHalalas(t.min_fee_halalas)} · النطاق{" "}
-                      {formatHalalas(t.guide_min_halalas)} – {formatHalalas(t.guide_max_halalas)} ·{" "}
+                      {t.min_fee_halalas > 0
+                        ? `الحد الأدنى ${formatHalalas(t.min_fee_halalas)}`
+                        : "بلا حد أدنى"}{" "}
+                      · النطاق {formatHalalas(t.guide_min_halalas)} –{" "}
+                      {formatHalalas(t.guide_max_halalas)} ·{" "}
                       {t.delegation_platform === "none"
                         ? "بلا تفويض"
                         : DELEGATION_LABEL[t.delegation_platform]}

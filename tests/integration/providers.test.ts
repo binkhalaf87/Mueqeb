@@ -342,25 +342,46 @@ describe.skipIf(!available)("providers, documents & catalog (local Postgres)", (
       expect(error).not.toBeNull();
     });
 
-    it("rejects a fee below the service minimum", async () => {
+    it("has no minimum by default; an admin-set minimum is enforced", async () => {
       const { providerId, client } = await freshProvider(false);
       const { data: type } = await client
         .from("service_types")
-        .select("id, min_fee_halalas")
+        .select("id, category_id, min_fee_halalas")
         .eq("slug", "cr_issue")
+        .single();
+      expect(type!.min_fee_halalas).toBe(0);
+      const { error: anyFee } = await client.from("provider_services").insert({
+        provider_id: providerId,
+        service_type_id: type!.id,
+        fee_halalas: 100,
+        duration_days: 3,
+      });
+      expect(anyFee).toBeNull();
+
+      // خدمة مستقلة بحد أدنى (لا نعدّل خدمات يستخدمها غير هذا الاختبار)
+      const { data: limited } = await admin
+        .from("service_types")
+        .insert({
+          category_id: type!.category_id,
+          slug: `minfee_${Date.now()}`,
+          name_ar: "خدمة بحد أدنى",
+          min_fee_halalas: 20_000,
+          guide_min_halalas: 20_000,
+          guide_max_halalas: 30_000,
+        })
+        .select("id")
         .single();
       const { error } = await client.from("provider_services").insert({
         provider_id: providerId,
-        service_type_id: type!.id,
-        fee_halalas: type!.min_fee_halalas - 1,
+        service_type_id: limited!.id,
+        fee_halalas: 19_999,
         duration_days: 3,
       });
       expect(error?.message).toContain("fee_below_minimum");
-
       const { error: okError } = await client.from("provider_services").insert({
         provider_id: providerId,
-        service_type_id: type!.id,
-        fee_halalas: type!.min_fee_halalas,
+        service_type_id: limited!.id,
+        fee_halalas: 20_000,
         duration_days: 3,
       });
       expect(okError).toBeNull();

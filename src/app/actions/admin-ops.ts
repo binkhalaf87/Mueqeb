@@ -92,10 +92,10 @@ export async function updateSettings(_prev: FormState, formData: FormData): Prom
 
 // ============ أنواع الخدمات ============
 
-const halalas = (label: string) =>
+const halalas = (label: string, allowZero = false) =>
   z.string().transform((v, ctx) => {
-    const h = parseSarToHalalas(v);
-    if (h === null || h <= 0) {
+    const h = parseSarToHalalas(v.trim() === "" && allowZero ? "0" : v);
+    if (h === null || h < 0 || (h === 0 && !allowZero)) {
       ctx.addIssue({ code: "custom", message: `أدخل ${label} بالريال` });
       return z.NEVER;
     }
@@ -112,7 +112,8 @@ const serviceTypeSchema = z
       .regex(/^[a-z][a-z0-9_]{2,60}$/, "معرّف لاتيني صغير وأرقام وشرطة سفلية"),
     nameAr: z.string().trim().min(2, "أدخل الاسم").max(120),
     description: z.string().trim().max(500).optional(),
-    minFee: halalas("الحد الأدنى"),
+    // 0 أو فارغ = بلا حد أدنى
+    minFee: halalas("الحد الأدنى", true),
     guideMin: halalas("بداية النطاق"),
     guideMax: halalas("نهاية النطاق"),
     requiredDocs: z

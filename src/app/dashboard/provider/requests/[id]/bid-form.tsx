@@ -37,7 +37,7 @@ export function BidForm({
           inputMode="decimal"
           dir="ltr"
           defaultValue={initial?.fee}
-          hint={`الحد الأدنى ${formatHalalas(minFee)}`}
+          hint={minFee > 0 ? `الحد الأدنى ${formatHalalas(minFee)}` : undefined}
           required
           error={state.errors?.fee}
         />

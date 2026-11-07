@@ -125,8 +125,10 @@ export default async function ProviderRequestPage({
         </p>
         {request.service_types && (
           <p className="text-muted">
-            الحد الأدنى للأتعاب: {formatHalalas(request.service_types.min_fee_halalas)} · النطاق
-            الاسترشادي الظاهر للعميل: {formatHalalas(request.service_types.guide_min_halalas)} –{" "}
+            {request.service_types.min_fee_halalas > 0 &&
+              `الحد الأدنى للأتعاب: ${formatHalalas(request.service_types.min_fee_halalas)} · `}
+            النطاق الاسترشادي الظاهر للعميل:{" "}
+            {formatHalalas(request.service_types.guide_min_halalas)} –{" "}
             {formatHalalas(request.service_types.guide_max_halalas)}
           </p>
         )}

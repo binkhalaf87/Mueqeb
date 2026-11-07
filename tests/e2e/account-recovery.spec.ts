@@ -11,6 +11,7 @@ test("التسجيل بالبريد: لا نشر قبل تأكيد البريد�
   await page.getByLabel("اسم المنشأة").fill("مؤسسة التأكيد");
   await page.getByLabel("رقم السجل التجاري").fill(uniqueCr());
   await page.getByRole("button", { name: "متابعة" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/requester$/);
 
   const banner = page.getByTestId("verify-email-banner");
   await expect(banner).toContainText(email);

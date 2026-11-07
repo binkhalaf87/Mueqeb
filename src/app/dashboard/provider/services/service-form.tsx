@@ -72,8 +72,12 @@ export function ServiceForm({
 
       {selected && (
         <p className="rounded-lg bg-background px-3 py-2 text-sm" data-testid="fee-guide">
-          الحد الأدنى للأتعاب: <strong>{formatHalalas(selected.minFee)}</strong> · النطاق
-          الاسترشادي: {formatHalalas(selected.guideMin)} – {formatHalalas(selected.guideMax)}
+          {selected.minFee > 0 && (
+            <>
+              الحد الأدنى للأتعاب: <strong>{formatHalalas(selected.minFee)}</strong> ·{" "}
+            </>
+          )}
+          النطاق الاسترشادي: {formatHalalas(selected.guideMin)} – {formatHalalas(selected.guideMax)}
         </p>
       )}
 

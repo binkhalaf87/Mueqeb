@@ -39,6 +39,18 @@ export class LogEmailChannel implements NotificationChannel {
   }
 }
 
+/**
+ * نطاقات محجوزة لا تستقبل بريداً (RFC 2606/6761)، كحسابات التجربة @mueqeb.test.
+ * لا نرسل إليها عبر مزوّد حقيقي: الارتداد يضر سمعة نطاق الإرسال.
+ */
+export function isUndeliverableAddress(email: string) {
+  const domain = email.split("@").pop()?.toLowerCase() ?? "";
+  return (
+    /(^|\.)(test|example|invalid|localhost)$/.test(domain) ||
+    /^example\.(com|net|org)$/.test(domain)
+  );
+}
+
 /** Resend (https://resend.com) عبر HTTP؛ يحتاج RESEND_API_KEY وEMAIL_FROM بنطاق موثّق */
 export class ResendEmailChannel implements NotificationChannel {
   readonly name = "email" as const;
@@ -53,6 +65,9 @@ export class ResendEmailChannel implements NotificationChannel {
 
   async send(n: OutgoingNotification): Promise<DeliveryResult> {
     if (!n.recipient.email) return { status: "skipped", reason: "no_email" };
+    if (isUndeliverableAddress(n.recipient.email)) {
+      return { status: "skipped", reason: "reserved_domain" };
+    }
     const { subject, text, html } = renderEmail(n);
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",

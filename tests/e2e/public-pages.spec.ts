@@ -46,7 +46,6 @@ test("sitemap وrobots", async ({ request }) => {
 for (const [path, title] of [
   ["/terms", "الشروط والأحكام"],
   ["/privacy", "سياسة الخصوصية"],
-  ["/refund-policy", "سياسة الاسترداد والنزاعات"],
 ] as const) {
   test(`${title}: مسودة معلّمة بوضوح`, async ({ page }) => {
     await page.goto(path);
@@ -85,4 +84,12 @@ test("صفحة المكتب تبرز الترخيص والتقييم", async ({ 
     .first()
     .click();
   await expect(page.getByTestId("provider-license")).toContainText("تحققت المنصة من سجله التجاري");
+});
+
+test("سياسة الاسترداد مخفية: لا رابط لها ولا تُفتح", async ({ page, request }) => {
+  await page.goto("/terms");
+  await expect(page.getByRole("link", { name: /الاسترداد/ })).toHaveCount(0);
+  await expect(page.getByText("المسؤولية والقانون الواجب التطبيق")).toHaveCount(0);
+  expect((await request.get("/refund-policy")).status()).toBe(404);
+  expect(await (await request.get("/sitemap.xml")).text()).not.toContain("refund-policy");
 });

@@ -211,13 +211,6 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
           <li>امنح المكتب التفويض عبر المنصة الحكومية الرسمية وارفع المستندات، فيبدأ التنفيذ.</li>
           <li>يسلّم المكتب الإنجاز مع إثبات، فتراجعه وتؤكده أو تعترض خلال 3 أيام.</li>
         </ol>
-        <p className="text-xs text-muted">
-          التفاصيل في{" "}
-          <Link href="/refund-policy" className="text-primary hover:underline">
-            سياسة الاسترداد والنزاعات
-          </Link>
-          .
-        </p>
       </Card>
 
       <Card className="space-y-3" data-testid="top-providers">

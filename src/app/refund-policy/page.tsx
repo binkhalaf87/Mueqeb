@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { LegalPage } from "@/components/legal-page";
 import { publicPolicyValues } from "@/lib/legal";
 
@@ -8,7 +9,11 @@ export const metadata: Metadata = {
   alternates: { canonical: "/refund-policy" },
 };
 
+/** مخفية حتى تكتمل مراجعتها: لا رابط إليها ولا فهرسة، والمسار يعيد 404 */
+const PUBLISHED = false;
+
 export default async function RefundPolicyPage() {
+  if (!PUBLISHED) notFound();
   const v = await publicPolicyValues();
   return (
     <LegalPage title="سياسة الاسترداد والنزاعات" updated="2026-10-29">

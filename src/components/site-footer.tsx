@@ -5,7 +5,6 @@ const LINKS = [
   { href: "/providers", label: "مكاتب التعقيب" },
   { href: "/terms", label: "الشروط والأحكام" },
   { href: "/privacy", label: "سياسة الخصوصية" },
-  { href: "/refund-policy", label: "الاسترداد والنزاعات" },
 ];
 
 export function SiteFooter() {

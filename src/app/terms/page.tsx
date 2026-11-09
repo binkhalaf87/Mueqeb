@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { LegalPage } from "@/components/legal-page";
 import { publicPolicyValues } from "@/lib/legal";
 
@@ -75,25 +74,11 @@ export default async function TermsPage() {
             تقتطع المنصة عمولة نسبتها {v.provider_commission_pct}% من أتعاب المزوّد عند استحقاقها.
           </li>
           <li>الرسوم الحكومية لا تمر عبر المنصة؛ يدفعها طالب الخدمة بنفسه عبر القناة الرسمية.</li>
-          <li>
-            الاسترداد والإلغاء والنزاعات وفق{" "}
-            <Link href="/refund-policy" className="text-primary hover:underline">
-              سياسة الاسترداد والنزاعات
-            </Link>
-            .
-          </li>
         </ul>
       </section>
       <section className="space-y-2">
         <h2>7. التقييمات</h2>
         <p>التقييم متاح بعد اكتمال طلب مدفوع عبر المنصة فقط، ولا يُعدَّل بعد إرساله.</p>
-      </section>
-      <section className="space-y-2">
-        <h2>8. المسؤولية والقانون الواجب التطبيق</h2>
-        <p>
-          تخضع هذه الشروط لأنظمة المملكة العربية السعودية. [يُستكمل بعد المراجعة القانونية: حدود
-          المسؤولية، الجهة القضائية المختصة، بيانات الكيان المشغّل وسجله التجاري.]
-        </p>
       </section>
     </LegalPage>
   );

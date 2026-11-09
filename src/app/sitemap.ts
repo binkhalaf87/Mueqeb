@@ -15,7 +15,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ),
     db.rpc("public_providers", {}),
   ]);
-  const staticPages = ["", "/services", "/providers", "/terms", "/privacy", "/refund-policy"];
+  const staticPages = ["", "/services", "/providers", "/terms", "/privacy"];
   return [
     ...staticPages.map((path) => ({
       url: `${base}${path}`,

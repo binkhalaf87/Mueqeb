@@ -15,11 +15,11 @@ export default async function ServicesIndexPage() {
   const catalog = await getServiceCatalog();
   return (
     <div className="space-y-6">
-      <PageTitle subtitle="اختر الخدمة لتعرف مستنداتها وسعرها الاسترشادي ومدتها وأفضل المكاتب لها.">
+      <PageTitle subtitle="اختر المعاملة لتعرف المستندات المطلوبة والسعر التقريبي والمدة المعتادة والمكاتب التي تقدّمها.">
         خدمات التعقيب
       </PageTitle>
       {catalog.map((category) => (
-        <Card key={category.id} className="space-y-3">
+        <Card key={category.id} id={category.slug} className="scroll-mt-6 space-y-3">
           <h2 className="font-semibold">{category.name_ar}</h2>
           <ul className="grid gap-2 sm:grid-cols-2" data-testid={`category-${category.slug}`}>
             {category.service_types.map((t) => (
@@ -30,7 +30,8 @@ export default async function ServicesIndexPage() {
                 >
                   <span>{t.name_ar}</span>
                   <span className="text-sm text-muted">
-                    {formatHalalas(t.guide_min_halalas)} – {formatHalalas(t.guide_max_halalas)}
+                    تقريباً {formatHalalas(t.guide_min_halalas)} –{" "}
+                    {formatHalalas(t.guide_max_halalas)}
                   </span>
                 </Link>
               </li>

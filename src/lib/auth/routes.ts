@@ -43,7 +43,7 @@ export function safeNextPath(next: unknown): string | null {
 export type NavItem = { href: string; label: string };
 
 export function navForRole(role: Role | null | undefined): NavItem[] {
-  const browse = { href: "/providers", label: "تصفح المزوّدين" };
+  const browse = { href: "/providers", label: "مكاتب التعقيب" };
   const account = { href: "/dashboard/account", label: "حسابي" };
   switch (role) {
     case "requester":

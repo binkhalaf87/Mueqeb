@@ -149,7 +149,7 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="space-y-1">
-          <h2 className="text-sm text-muted">النطاق الاسترشادي للأتعاب</h2>
+          <h2 className="text-sm text-muted">السعر التقريبي لأتعاب المكتب</h2>
           <p className="text-xl font-bold" data-testid="guide-range">
             {formatHalalas(service.guide_min_halalas)} – {formatHalalas(service.guide_max_halalas)}
           </p>
@@ -201,12 +201,23 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
 
       <Card className="space-y-3">
         <h2 className="font-semibold">كيف تتم الخدمة عبر مُعقّب</h2>
-        <ol className="list-inside list-decimal space-y-1 text-sm">
-          <li>انشر طلبك فتصلك عروض مغلقة من المكاتب المعتمدة، أو اطلب من مكتب بعينه.</li>
-          <li>اختر العرض وادفع؛ المبلغ محفوظ لدى المنصة حتى تأكيدك للإنجاز.</li>
-          <li>امنح التفويض الرسمي وارفع المستندات، ويبدأ المكتب التنفيذ.</li>
-          <li>يسلّم المكتب الإنجاز بإثبات، فتؤكده أو تعترض خلال 3 أيام.</li>
+        <ol className="list-inside list-decimal space-y-2 text-sm">
+          <li>
+            <strong>اطلب عروض أسعار</strong>: يصل طلبك للمكاتب المرخّصة في مدينتك، وكل مكتب يقدّم
+            سعره ومدته دون أن يرى أسعار المكاتب الأخرى، فتقارن وتختار الأنسب. أو{" "}
+            <strong>اختر مكتباً</strong> واطلب الخدمة منه مباشرة بسعره المعلن.
+          </li>
+          <li>اختر العرض وادفع أتعاب المكتب ورسم الخدمة عبر المنصة.</li>
+          <li>امنح المكتب التفويض عبر المنصة الحكومية الرسمية وارفع المستندات، فيبدأ التنفيذ.</li>
+          <li>يسلّم المكتب الإنجاز مع إثبات، فتراجعه وتؤكده أو تعترض خلال 3 أيام.</li>
         </ol>
+        <p className="text-xs text-muted">
+          التفاصيل في{" "}
+          <Link href="/refund-policy" className="text-primary hover:underline">
+            سياسة الاسترداد والنزاعات
+          </Link>
+          .
+        </p>
       </Card>
 
       <Card className="space-y-3" data-testid="top-providers">

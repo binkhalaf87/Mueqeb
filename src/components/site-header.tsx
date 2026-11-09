@@ -36,8 +36,11 @@ export async function SiteHeader() {
           </nav>
         ) : (
           <nav aria-label="القائمة الرئيسية" className="flex gap-4 text-sm">
+            <Link href="/services" className="text-foreground hover:text-primary">
+              الخدمات
+            </Link>
             <Link href="/providers" className="text-foreground hover:text-primary">
-              تصفح المزوّدين
+              مكاتب التعقيب
             </Link>
           </nav>
         )}

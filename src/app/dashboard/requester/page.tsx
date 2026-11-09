@@ -95,7 +95,7 @@ export default async function RequesterDashboard({
 
   return (
     <div className="space-y-6">
-      <PageTitle subtitle="انشر طلباً عاماً لتصلك عروض مغلقة، أو اطلب مباشرة من ملف أي مكتب.">
+      <PageTitle subtitle="انشر طلبك لتصلك عروض أسعار من عدة مكاتب (لا يرى أي مكتب أسعار غيره)، أو اطلب مباشرة من ملف أي مكتب.">
         طلباتي
       </PageTitle>
 

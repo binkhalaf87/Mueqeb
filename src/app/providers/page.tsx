@@ -10,7 +10,7 @@ import { getProviderStats } from "@/lib/providers/stats";
 import { rankProviders } from "@/lib/providers/ranking";
 import { Card, PageTitle, Select } from "@/components/ui";
 
-export const metadata: Metadata = { title: "تصفح المزوّدين" };
+export const metadata: Metadata = { title: "مكاتب التعقيب" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -43,8 +43,8 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
 
   return (
     <div className="space-y-6">
-      <PageTitle subtitle="مكاتب خدمات عامة مرخّصة وثّقت الإدارة مستنداتها.">
-        تصفح المزوّدين
+      <PageTitle subtitle="مكاتب خدمات عامة مرخّصة تحققت المنصة من سجلها التجاري ورخصتها البلدية. قارن الأسعار والتقييمات ثم اطلب مباشرة.">
+        مكاتب التعقيب
       </PageTitle>
 
       <Card>

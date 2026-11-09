@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const LINKS = [
   { href: "/services", label: "الخدمات" },
-  { href: "/providers", label: "المكاتب" },
+  { href: "/providers", label: "مكاتب التعقيب" },
   { href: "/terms", label: "الشروط والأحكام" },
   { href: "/privacy", label: "سياسة الخصوصية" },
   { href: "/refund-policy", label: "الاسترداد والنزاعات" },

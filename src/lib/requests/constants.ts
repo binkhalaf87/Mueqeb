@@ -41,7 +41,7 @@ export const STATUS_TONE: Record<
 export const MODE_LABEL: Record<RequestMode, string> = {
   direct_listed: "طلب مباشر بالسعر المعلن",
   direct_quote: "طلب عرض خاص",
-  public: "طلب عام",
+  public: "طلب عروض أسعار",
 };
 
 export const URGENCY_LABEL: Record<RequestUrgency, string> = {

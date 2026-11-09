@@ -54,7 +54,18 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{provider.office_name}</h1>
           <VerifiedBadge />
+          <Rating value={stats?.avg_rating} count={stats?.reviews_count} />
         </div>
+        <p
+          className="max-w-3xl rounded-lg bg-primary-soft px-3 py-2 text-sm"
+          data-testid="provider-license"
+        >
+          مكتب خدمات عامة مرخّص: تحققت المنصة من سجله التجاري ورخصته البلدية وهوية المسؤول
+          {provider.approved_since
+            ? ` (موثّق منذ ${new Date(provider.approved_since).toLocaleDateString("ar-SA-u-ca-gregory", { year: "numeric", month: "long" })})`
+            : ""}
+          .
+        </p>
         <p className="text-muted">يخدم: {provider.cities.join("، ")}</p>
         {provider.bio && <p className="max-w-3xl whitespace-pre-line">{provider.bio}</p>}
       </section>

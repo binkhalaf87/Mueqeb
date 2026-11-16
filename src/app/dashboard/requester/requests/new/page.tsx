@@ -42,8 +42,6 @@ export default async function NewRequestPage({
       id: t.id,
       name: t.name_ar,
       category: c.name_ar,
-      guideMin: t.guide_min_halalas,
-      guideMax: t.guide_max_halalas,
       requiredDocs: t.required_docs,
       delegation: t.delegation_platform,
     })),

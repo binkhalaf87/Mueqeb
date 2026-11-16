@@ -123,13 +123,9 @@ export default async function ProviderRequestPage({
           <span className="text-muted">المستندات المتوفرة لدى العميل: </span>
           {request.available_docs.length ? request.available_docs.join("، ") : "لم يحدد"}
         </p>
-        {request.service_types && (
+        {request.service_types && request.service_types.min_fee_halalas > 0 && (
           <p className="text-muted">
-            {request.service_types.min_fee_halalas > 0 &&
-              `الحد الأدنى للأتعاب: ${formatHalalas(request.service_types.min_fee_halalas)} · `}
-            النطاق الاسترشادي الظاهر للعميل:{" "}
-            {formatHalalas(request.service_types.guide_min_halalas)} –{" "}
-            {formatHalalas(request.service_types.guide_max_halalas)}
+            الحد الأدنى للأتعاب: {formatHalalas(request.service_types.min_fee_halalas)}
           </p>
         )}
         <p data-testid="client-stats">

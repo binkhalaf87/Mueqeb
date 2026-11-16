@@ -14,8 +14,6 @@ export type ServiceOption = {
   id: string;
   name: string;
   category: string;
-  guideMin: number;
-  guideMax: number;
   requiredDocs: string[];
   delegation: DelegationPlatform;
 };
@@ -108,13 +106,7 @@ export function RequestForm({
                 المتوقعة: {provider.durationDays} يوم
               </p>
             ) : (
-              <p>
-                نطاق تقديري تضعه المنصة لأتعاب هذه الخدمة:{" "}
-                <strong>
-                  {formatHalalas(service.guideMin)} – {formatHalalas(service.guideMax)}
-                </strong>
-                . ليس سعراً من مكتب؛ الأتعاب الفعلية تظهر في العروض.
-              </p>
+              <p>تُحدد أتعاب المكتب في العرض الذي يرسله لك، مع المدة وما يشمله العمل.</p>
             )}
             <p className="text-muted">
               الرسوم الحكومية لا تُدفع عبر المنصة؛ تدفعها مباشرة عبر القناة الرسمية.

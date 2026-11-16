@@ -38,7 +38,8 @@ test("معيار القبول: طلب عام من منشأة، 3 عروض مغل
   const requester = await as(browser, "establishment@mueqeb.test");
   await requester.goto("/dashboard/requester/requests/new");
   await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
-  await expect(requester.getByTestId("service-info")).toContainText("150 ر.س – 300 ر.س");
+  await expect(requester.getByTestId("service-info")).toContainText("تُحدد أتعاب المكتب في العرض");
+  await expect(requester.getByTestId("service-info")).not.toContainText("300 ر.س");
   await requester.getByLabel("صورة إقامة العامل").check();
   await requester.getByLabel("المدينة").selectOption("الرياض");
   await requester.getByLabel("مستعجل").check();

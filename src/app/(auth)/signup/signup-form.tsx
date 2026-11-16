@@ -4,11 +4,12 @@ import { useActionState } from "react";
 import { signUp, type FormState } from "@/app/actions/auth";
 import { Button, Field, FormMessage } from "@/components/ui";
 
-export function SignupForm() {
+export function SignupForm({ asProvider = false }: { asProvider?: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(signUp, {});
 
   return (
     <form action={action} className="space-y-4" noValidate>
+      {asProvider && <input type="hidden" name="as" value="provider" />}
       <FormMessage>{state.message}</FormMessage>
       <Field
         label="الاسم الكامل"

@@ -77,7 +77,7 @@ test("المحادثة قبل الترسية تحجب أرقام التواصل"
   const description = `طلب لاختبار المحادثة ${Math.random().toString(36).slice(2, 7).replace(/\d/g, "x")}`;
   const requester = await as(browser, "establishment@mueqeb.test");
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخصة عمل" });
+  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
   await requester.getByLabel("المدينة").selectOption("الرياض");
   await requester.getByLabel("وصف الطلب").fill(description);
   await requester.getByRole("button", { name: "انشر الطلب" }).click();

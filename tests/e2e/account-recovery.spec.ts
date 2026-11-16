@@ -18,7 +18,7 @@ test("التسجيل بالبريد: لا نشر قبل تأكيد البريد�
 
   // الخادم يرفض النشر قبل التأكيد (لا يُعتمد على الواجهة)
   await page.goto("/dashboard/requester/requests/new");
-  await page.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخصة عمل" });
+  await page.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
   await page.getByLabel("المدينة").selectOption("الرياض");
   await page.getByLabel("وصف الطلب").fill("طلب قبل تأكيد البريد");
   await page.getByRole("button", { name: "انشر الطلب" }).click();

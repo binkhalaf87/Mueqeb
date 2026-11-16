@@ -9,6 +9,12 @@ import { getPaymentProvider } from "@/lib/payments";
 import { Card, PageTitle } from "@/components/ui";
 import { PayButton } from "./pay-button";
 
+const GATEWAY_LABEL: Record<string, string> = {
+  mock: "بوابة اختبار محلية",
+  moyasar: "Moyasar",
+  paymob: "Paymob",
+};
+
 export const metadata: Metadata = { title: "الدفع" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,7 +45,9 @@ export default async function PayPage({
   const { data: offices } = await db.rpc("public_provider", { p_provider_id: order.provider_id });
   const office = offices?.[0];
   const pct = (bps: number) => `${bps / 100}%`;
-  const gateway = getPaymentProvider().name;
+  const provider = getPaymentProvider();
+  const gateway = provider.name;
+  const livePayments = "live" in provider && provider.live === true;
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -54,7 +62,7 @@ export default async function PayPage({
       <Card className="space-y-4" data-testid="payment-summary">
         <dl className="space-y-3">
           <div className="flex justify-between gap-4">
-            <dt>أتعاب المزوّد</dt>
+            <dt>أتعاب المكتب</dt>
             <dd data-testid="fee">{formatHalalas(order.fee_halalas)}</dd>
           </div>
           <div className="flex justify-between gap-4">
@@ -79,11 +87,15 @@ export default async function PayPage({
         </p>
       </Card>
 
-      <PayButton requestId={id} total={formatHalalas(order.total_paid_halalas)} />
-      <p className="text-center text-xs text-muted">
-        وضع الاختبار ({gateway === "mock" ? "بوابة اختبار محلية" : "Moyasar test"}) — لا تُخصم أي
-        مبالغ حقيقية.
+      <p className="text-sm" data-testid="before-confirm">
+        راجع نطاق العمل، وأتعاب المكتب، ورسوم المنصة، وما لا يشمله العرض.
       </p>
+      <PayButton requestId={id} total={formatHalalas(order.total_paid_halalas)} />
+      {!livePayments && (
+        <p className="text-center text-xs text-muted">
+          وضع الاختبار ({GATEWAY_LABEL[gateway]}) — لا تُخصم أي مبالغ حقيقية.
+        </p>
+      )}
     </div>
   );
 }

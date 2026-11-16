@@ -11,7 +11,7 @@ export function Rating({
   if (value === null || value === undefined) {
     return (
       <span className="text-muted" data-testid={testId}>
-        لا تقييمات بعد
+        لا توجد تقييمات بعد
       </span>
     );
   }

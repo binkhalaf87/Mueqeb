@@ -24,7 +24,7 @@ export async function paidRequest(browser: Browser) {
   await requester
     .getByTestId("provider-services")
     .locator("li")
-    .filter({ hasText: "إصدار أو تجديد رخصة عمل" })
+    .filter({ hasText: "إصدار أو تجديد رخص العمل" })
     .getByRole("link", { name: "اطلب بالسعر المعلن" })
     .click();
   await requester.getByLabel("المدينة").selectOption("الرياض");

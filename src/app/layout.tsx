@@ -15,8 +15,12 @@ const plexArabic = IBM_Plex_Sans_Arabic({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: { default: "مُعقّب", template: "%s | مُعقّب" },
-  description: "سوق موثوق يربطك بمكاتب تعقيب مرخّصة لإنجاز خدماتك الحكومية.",
+  title: {
+    default: "مُعقّب | خدمات التعقيب ومكاتب الخدمات العامة للمنشآت",
+    template: "%s | مُعقّب",
+  },
+  description:
+    "ابحث عن خدمات التعقيب لمنشأتك، وتعرّف على المكاتب المتاحة لخدمات قوى والتأمينات ومدد والسجل التجاري وبلدي.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

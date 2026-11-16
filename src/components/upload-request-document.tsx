@@ -20,6 +20,9 @@ export function UploadRequestDocument({
   return (
     <form action={action} className="space-y-2" data-testid={testId}>
       <input type="hidden" name="requestId" value={requestId} />
+      <p className="text-xs text-muted">
+        ارفع المستندات اللازمة لهذا الطلب فقط. لا ترفق كلمات مرور أو رموز تحقق.
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         {labels.length > 0 ? (
           <select

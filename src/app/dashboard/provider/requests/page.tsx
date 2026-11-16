@@ -70,7 +70,7 @@ export default async function ProviderRequestsPage({
 
   return (
     <div className="space-y-6">
-      <PageTitle subtitle="طلبات عامة في خدماتك ومدنك، وطلبات عروض خاصة موجّهة إليك. بيانات العملاء تظهر بعد الترسية فقط.">
+      <PageTitle subtitle="طلبات عامة في خدماتك ومدنك، وطلبات عروض خاصة موجّهة إليك. بيانات العملاء تظهر بعد اختيار عرضك فقط.">
         الطلبات المتاحة
       </PageTitle>
 

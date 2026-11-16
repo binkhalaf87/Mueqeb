@@ -18,7 +18,7 @@ async function directListedOrder(page: Page) {
   await page
     .getByTestId("provider-services")
     .locator("li")
-    .filter({ hasText: "إصدار أو تجديد رخصة عمل" })
+    .filter({ hasText: "إصدار أو تجديد رخص العمل" })
     .getByRole("link", { name: "اطلب بالسعر المعلن" })
     .click();
   await page.getByLabel("المدينة").selectOption("الرياض");
@@ -101,7 +101,7 @@ test("الرسوم الحكومية من العرض تظهر منفصلة، وا
   const description = `تسجيل منشأة جديدة في التأمينات ${tag()}`;
   const requester = await as(browser, "establishment@mueqeb.test");
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخصة عمل" });
+  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
   await requester.getByLabel("المدينة").selectOption("الرياض");
   await requester.getByLabel("وصف الطلب").fill(description);
   await requester.getByRole("button", { name: "انشر الطلب" }).click();

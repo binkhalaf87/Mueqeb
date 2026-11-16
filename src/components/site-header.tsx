@@ -87,14 +87,17 @@ export async function SiteHeader() {
             </>
           ) : (
             <>
+              <Link href="/signup?as=provider" className="text-muted hover:text-primary">
+                انضم كمكتب تعقيب
+              </Link>
               <Link href="/login" className="hover:text-primary">
-                دخول
+                تسجيل الدخول
               </Link>
               <Link
                 href="/signup"
                 className="rounded-lg bg-primary px-3 py-1.5 font-medium text-white hover:bg-primary-hover"
               >
-                حساب جديد
+                إنشاء حساب
               </Link>
             </>
           )}

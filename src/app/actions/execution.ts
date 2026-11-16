@@ -274,7 +274,7 @@ export async function sendMessage(
   if (result.status === "masked") {
     return {
       status: "masked",
-      message: "حُجبت أرقام التواصل أو الروابط: التواصل داخل المنصة فقط حتى الترسية.",
+      message: "حُجبت أرقام التواصل أو الروابط: التواصل داخل المنصة فقط حتى اختيار العرض.",
     };
   }
   return { status: "sent" };

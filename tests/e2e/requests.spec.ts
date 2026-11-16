@@ -37,7 +37,7 @@ test("معيار القبول: طلب عام من منشأة، 3 عروض مغل
   // 1) المنشأة تنشر طلباً عاماً
   const requester = await as(browser, "establishment@mueqeb.test");
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخصة عمل" });
+  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
   await expect(requester.getByTestId("service-info")).toContainText("150 ر.س – 300 ر.س");
   await requester.getByLabel("صورة إقامة العامل").check();
   await requester.getByLabel("المدينة").selectOption("الرياض");
@@ -47,7 +47,7 @@ test("معيار القبول: طلب عام من منشأة، 3 عروض مغل
     .getByLabel("ملاحظات خاصة (اختياري)")
     .fill("المسؤول: أبو فهد، يفضّل التواصل مساءً");
   await requester.getByRole("button", { name: "انشر الطلب" }).click();
-  await expect(requester).toHaveURL(/\/dashboard\/requester\/requests\/[0-9a-f-]{36}$/);
+  await expect(requester).toHaveURL(/\/dashboard\/requester\/requests\/[0-9a-f-]{36}\?created=1$/);
   await expect(requester.getByTestId("request-status")).toHaveText("مفتوح");
 
   // 2) ثلاثة مزوّدين يقدّمون عروضاً
@@ -114,7 +114,7 @@ test("طلب مباشر بالسعر المعلن يُرسى فوراً", async 
   await requester
     .getByTestId("provider-services")
     .locator("li")
-    .filter({ hasText: "إصدار أو تجديد رخصة عمل" })
+    .filter({ hasText: "إصدار أو تجديد رخص العمل" })
     .getByRole("link", { name: "اطلب بالسعر المعلن" })
     .click();
   await expect(requester.getByTestId("service-info")).toContainText("السعر المعلن: 180 ر.س");
@@ -134,7 +134,7 @@ test("طلب عرض خاص يصل للمكتب المستهدف وحده", async
   await requester
     .getByTestId("provider-services")
     .locator("li")
-    .filter({ hasText: "تعديل نشاط السجل التجاري" })
+    .filter({ hasText: "تعديل أنشطة السجل التجاري" })
     .getByRole("link", { name: "اطلب عرضاً خاصاً" })
     .click();
   await requester.getByLabel("المدينة").selectOption("الرياض");
@@ -159,7 +159,7 @@ test("طلب عرض خاص يصل للمكتب المستهدف وحده", async
 test("وصف يحوي رقم جوال يُرفض مع إبقاء القيم", async ({ page }) => {
   await logIn(page, "establishment@mueqeb.test");
   await page.goto("/dashboard/requester/requests/new");
-  await page.getByLabel("الخدمة").selectOption({ label: "تسجيل منشأة في التأمينات" });
+  await page.getByLabel("الخدمة").selectOption({ label: "تسجيل منشأة في التأمينات الاجتماعية" });
   await page.getByLabel("المدينة").selectOption("الدمام");
   await page.getByLabel("وصف الطلب").fill("أرجو التواصل على 0551234567 لتسجيل المنشأة");
   await page.getByRole("button", { name: "انشر الطلب" }).click();

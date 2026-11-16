@@ -35,11 +35,11 @@ export const createRequestSchema = z
       .transform((v) => (v ? v : undefined)),
   })
   .refine((v) => v.mode === "public" || Boolean(v.providerId), {
-    message: "المزوّد مطلوب للطلب المباشر",
+    message: "المكتب مطلوب للطلب المباشر",
     path: ["providerId"],
   })
   .refine((v) => v.mode !== "public" || v.description.length >= 10, {
-    message: "صف طلبك في 10 أحرف على الأقل ليفهمه المزوّدون",
+    message: "صف طلبك في 10 أحرف على الأقل لتفهمه المكاتب",
     path: ["description"],
   });
 

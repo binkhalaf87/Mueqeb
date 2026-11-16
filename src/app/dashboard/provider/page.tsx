@@ -9,7 +9,7 @@ import { ProviderStageBadge } from "@/components/provider-stage-badge";
 import { Card, PageTitle } from "@/components/ui";
 import { ProviderOrdersPanel } from "./orders-panel";
 
-export const metadata: Metadata = { title: "لوحة المزوّد" };
+export const metadata: Metadata = { title: "لوحة المكتب" };
 
 export default async function ProviderDashboard() {
   const user = await requireRole("provider");
@@ -58,7 +58,7 @@ export default async function ProviderDashboard() {
             : "أكمل ملف مكتبك وخدماتك ليظهر للعملاء بعد اعتماد الإدارة."
         }
       >
-        {provider?.office_name ?? "لوحة المزوّد"}
+        {provider?.office_name ?? "لوحة المكتب"}
       </PageTitle>
 
       <Card className="space-y-3">

@@ -5,16 +5,16 @@ import { cache } from "react";
 import { getDb } from "@/lib/db/server";
 import type { Tables } from "@/lib/db/types";
 import { formatHalalas } from "@/lib/money";
-import { DELEGATION_LABEL } from "@/lib/providers/constants";
 import { getProviderStats } from "@/lib/providers/stats";
 import { rankProviders } from "@/lib/providers/ranking";
+import { CATEGORY_PLATFORM } from "@/lib/services/search";
 import { jsonLd, siteUrl } from "@/lib/site";
 import { Rating } from "@/components/rating";
 import { VerifiedBadge } from "@/components/verified-badge";
 import { Card } from "@/components/ui";
 
 const SLUG = /^[a-z][a-z0-9_]{2,60}$/;
-const TOP_PROVIDERS = 5;
+const LISTED_PROVIDERS = 5;
 
 type ServiceType = Tables<"service_types"> & { category_name: string; category_slug: string };
 
@@ -33,7 +33,7 @@ const getService = cache(async (slug: string) => {
 function describe(service: ServiceType) {
   return (
     service.description ||
-    `${service.name_ar} عبر مكاتب تعقيب مرخّصة وموثّقة في السعودية: المستندات المطلوبة، والسعر الاسترشادي، والمدة المعتادة.`
+    `${service.name_ar} عبر مكاتب التعقيب على مُعقّب: وصف الخدمة ومتطلباتها والمكاتب المتاحة لتقديمها.`
   );
 }
 
@@ -42,10 +42,10 @@ export async function generateMetadata({
 }: PageProps<"/services/[slug]">): Promise<Metadata> {
   const service = await getService((await params).slug);
   if (!service) return { title: "خدمة غير موجودة" };
-  const title = `${service.name_ar} — ${service.category_name}`;
-  const description = `${describe(service)} السعر الاسترشادي ${formatHalalas(service.guide_min_halalas)} – ${formatHalalas(service.guide_max_halalas)}.`;
+  const title = `${service.name_ar} | خدمات التعقيب عبر مُعقّب`;
+  const description = describe(service);
   return {
-    title,
+    title: { absolute: title },
     description,
     alternates: { canonical: `/services/${service.slug}` },
     openGraph: {
@@ -69,7 +69,7 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
   ]);
   const summary = overview?.[0];
   const statsById = await getProviderStats((providers ?? []).map((p) => p.id));
-  const top = rankProviders(
+  const listed = rankProviders(
     (providers ?? []).map((p) => {
       const st = statsById.get(p.id);
       return {
@@ -81,10 +81,15 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
         onTimePct: st?.on_time_pct ?? null,
       };
     }),
-  ).slice(0, TOP_PROVIDERS);
+  ).slice(0, LISTED_PROVIDERS);
 
-  const requestHref = `/dashboard/requester/requests/new?service=${service.id}`;
+  const hasProviders = listed.length > 0;
+  const platform = CATEGORY_PLATFORM[service.category_slug] ?? service.category_name;
+  const quoteHref = `/dashboard/requester/requests/new?service=${service.id}`;
+  const chooseHref = `/providers?service=${service.id}`;
   const base = siteUrl();
+
+  // البيانات المنظمة تطابق المحتوى: السعر فقط إن وُجدت أسعار منشورة فعلاً من مكاتب
   const structuredData = [
     {
       "@context": "https://schema.org",
@@ -95,13 +100,16 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
       areaServed: { "@type": "Country", name: "المملكة العربية السعودية" },
       url: `${base}/services/${service.slug}`,
       provider: { "@type": "Organization", name: "مُعقّب", url: base },
-      offers: {
-        "@type": "AggregateOffer",
-        priceCurrency: "SAR",
-        lowPrice: (service.guide_min_halalas / 100).toFixed(2),
-        highPrice: (service.guide_max_halalas / 100).toFixed(2),
-        ...(summary?.providers_count ? { offerCount: summary.providers_count } : {}),
-      },
+      ...(summary?.from_fee_halalas
+        ? {
+            offers: {
+              "@type": "AggregateOffer",
+              priceCurrency: "SAR",
+              lowPrice: (summary.from_fee_halalas / 100).toFixed(2),
+              offerCount: summary.providers_count,
+            },
+          }
+        : {}),
     },
     {
       "@context": "https://schema.org",
@@ -119,6 +127,11 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
     },
   ];
 
+  const primaryButton =
+    "inline-block rounded-lg bg-primary px-5 py-2.5 font-medium text-white hover:bg-primary-hover";
+  const secondaryButton =
+    "inline-block rounded-lg border border-border bg-surface px-5 py-2.5 font-medium hover:border-primary";
+
   return (
     <article className="space-y-6">
       <script
@@ -133,95 +146,92 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
         / {service.category_name}
       </nav>
 
+      {/* 1–2: الاسم والوصف والمنصة الرسمية */}
       <header className="space-y-3">
         <h1 className="text-3xl font-bold">{service.name_ar}</h1>
         <p className="max-w-3xl text-lg text-muted" data-testid="service-description">
           {describe(service)}
         </p>
-        <Link
-          href={requestHref}
-          className="inline-block rounded-lg bg-primary px-5 py-2.5 font-medium text-white hover:bg-primary-hover"
-          data-testid="request-now"
-        >
-          اطلب الآن
-        </Link>
+        <p className="text-sm" data-testid="service-platform">
+          المنصة الرسمية ذات الصلة: <strong>{platform}</strong>. مُعقّب منصة خاصة وليس جهة حكومية.
+        </p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* 3: نطاق عمل المكتب */}
+      <Card className="space-y-2">
+        <h2 className="font-semibold">ما الذي يشمله عمل المكتب؟</h2>
+        <p className="text-sm">
+          يوضح المكتب في عرضه الإجراءات التي سيساعدك فيها، والمعلومات المطلوبة، وما يحتاج إلى إجراء
+          منك أو من الموظف.
+        </p>
+      </Card>
+
+      {/* 4: المتطلبات */}
+      <Card className="space-y-3">
+        <h2 className="font-semibold">ما الذي تحتاج إلى تجهيزه؟</h2>
+        <p className="text-sm">
+          تختلف المتطلبات بحسب الخدمة وحالة المنشأة والموظف. راجع متطلبات الخدمة الرسمية، واتفق مع
+          المكتب على المعلومات اللازمة قبل بدء العمل.
+        </p>
+        {service.required_docs.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">أمثلة على معلومات أو مستندات قد تُطلب:</p>
+            <ul className="list-inside list-disc space-y-1 text-sm" data-testid="required-docs">
+              {service.required_docs.map((doc) => (
+                <li key={doc}>{doc}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted">هذه أمثلة وليست قائمة كاملة أو ثابتة لكل الحالات.</p>
+          </div>
+        )}
+        <p className="text-sm">
+          تعتمد طريقة التفويض أو منح الصلاحية على الخدمة والمنصة المختصة. راجع الإجراء المطلوب قبل
+          تأكيد الطلب، واستخدم القنوات الرسمية فقط. بعض الخطوات، مثل الموافقات ورموز التحقق، ينفذها
+          صاحب الحساب أو الموظف بنفسه.
+        </p>
+        <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm">
+          لا تشارك كلمة المرور أو رمز التحقق لحساباتك الحكومية مع أي جهة، ولا تطلبهما المنصة.
+        </p>
+      </Card>
+
+      {/* 5–6: الأتعاب والمدة */}
+      <div className="grid gap-4 sm:grid-cols-2">
         <Card className="space-y-1">
-          <h2 className="text-sm text-muted">السعر التقريبي لأتعاب المكتب</h2>
-          <p className="text-xl font-bold" data-testid="guide-range">
-            {formatHalalas(service.guide_min_halalas)} – {formatHalalas(service.guide_max_halalas)}
+          <h2 className="font-semibold">أتعاب المكتب</h2>
+          <p className="text-lg font-bold" data-testid="service-fee">
+            {summary?.from_fee_halalas
+              ? `أسعار معلنة من المكاتب: من ${formatHalalas(summary.from_fee_halalas)}`
+              : "تُحدد في عرض السعر بحسب نطاق العمل."}
           </p>
           <p className="text-xs text-muted">
-            لا يشمل الرسوم الحكومية، وتدفعها بنفسك عبر القناة الرسمية.
+            لا تشمل أتعاب المكتب الرسوم الحكومية. تظهر رسوم المنصة، إن وجدت، في ملخص التكلفة قبل
+            تأكيد الطلب.
           </p>
         </Card>
         <Card className="space-y-1">
-          <h2 className="text-sm text-muted">المدة المعتادة</h2>
-          <p className="text-xl font-bold" data-testid="typical-duration">
-            {summary?.typical_duration_days
-              ? `${summary.typical_duration_days} أيام عمل تقريباً`
-              : "—"}
-          </p>
-          <p className="text-xs text-muted">الوسيط من مدد المكاتب المعتمدة المعلنة.</p>
-        </Card>
-        <Card className="space-y-1">
-          <h2 className="text-sm text-muted">مكاتب معتمدة تقدّمها</h2>
-          <p className="text-xl font-bold">{summary?.providers_count ?? 0}</p>
-          {summary?.from_fee_halalas ? (
-            <p className="text-xs text-muted">
-              أسعار معلنة تبدأ من {formatHalalas(summary.from_fee_halalas)}
+          <h2 className="font-semibold">المدة التقديرية</h2>
+          {summary?.typical_duration_days ? (
+            <p className="text-lg font-bold" data-testid="typical-duration">
+              نحو {summary.typical_duration_days} أيام بحسب مدد المكاتب المعلنة
             </p>
           ) : null}
+          <p className="text-xs text-muted">
+            يوضح المكتب المدة التقديرية لعمله في العرض. وقد يتأثر اكتمال المعاملة بالموافقات
+            والإجراءات لدى الجهات ذات العلاقة.
+          </p>
         </Card>
       </div>
 
-      <Card className="space-y-3">
-        <h2 className="font-semibold">المستندات المطلوبة عادةً</h2>
-        {service.required_docs.length ? (
-          <ul className="list-inside list-disc space-y-1" data-testid="required-docs">
-            {service.required_docs.map((doc) => (
-              <li key={doc}>{doc}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted">يحددها المكتب حسب حالتك.</p>
-        )}
-        <p className="text-sm">
-          التفويض:{" "}
-          {service.delegation_platform === "none"
-            ? DELEGATION_LABEL.none
-            : `تمنح المكتب تفويضاً عبر ${DELEGATION_LABEL[service.delegation_platform]} بعد الدفع، والمنصة تعرض لك الخطوات.`}
-        </p>
-        <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm">
-          لن يطلب منك المكتب ولا المنصة أبداً كلمة مرور أو رمز تحقق لحساباتك الحكومية.
-        </p>
-      </Card>
-
-      <Card className="space-y-3">
-        <h2 className="font-semibold">كيف تتم الخدمة عبر مُعقّب</h2>
-        <ol className="list-inside list-decimal space-y-2 text-sm">
-          <li>
-            <strong>اطلب عروض أسعار</strong>: يصل طلبك للمكاتب المرخّصة في مدينتك، وكل مكتب يقدّم
-            سعره ومدته دون أن يرى أسعار المكاتب الأخرى، فتقارن وتختار الأنسب. أو{" "}
-            <strong>اختر مكتباً</strong> واطلب الخدمة منه مباشرة بسعره المعلن.
-          </li>
-          <li>اختر العرض وادفع أتعاب المكتب ورسم الخدمة عبر المنصة.</li>
-          <li>امنح المكتب التفويض عبر المنصة الحكومية الرسمية وارفع المستندات، فيبدأ التنفيذ.</li>
-          <li>يسلّم المكتب الإنجاز مع إثبات، فتراجعه وتؤكده أو تعترض خلال 3 أيام.</li>
-        </ol>
-      </Card>
-
+      {/* 7: المكاتب المتاحة */}
       <Card className="space-y-3" data-testid="top-providers">
-        <h2 className="font-semibold">أفضل المكاتب لهذه الخدمة</h2>
-        {!top.length ? (
-          <p className="text-sm text-muted">
-            لا توجد مكاتب معتمدة لهذه الخدمة بعد. انشر طلبك وسنعرضه عليها.
+        <h2 className="font-semibold">مكاتب تقدّم هذه الخدمة</h2>
+        {!hasProviders ? (
+          <p className="text-sm text-muted" data-testid="no-providers-for-service">
+            لا توجد مكاتب متاحة لهذه الخدمة حاليًا.
           </p>
         ) : (
           <ul className="divide-y divide-border">
-            {top.map((p) => (
+            {listed.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/providers/${p.id}`}
@@ -230,27 +240,33 @@ export default async function ServicePage({ params }: PageProps<"/services/[slug
                   <span className="font-medium">{p.office_name}</span>
                   <VerifiedBadge />
                   <span className="text-sm text-muted">{p.cities.join("، ")}</span>
-                  {p.avgRating != null && <Rating value={p.avgRating} count={p.reviewsCount} />}
+                  <Rating
+                    value={p.avgRating}
+                    count={p.avgRating == null ? undefined : p.reviewsCount}
+                  />
                 </Link>
               </li>
             ))}
           </ul>
         )}
-        <Link
-          href={`/providers?service=${service.id}`}
-          className="text-sm text-primary hover:underline"
-        >
-          كل المكاتب لهذه الخدمة ←
-        </Link>
       </Card>
 
-      <div className="text-center">
-        <Link
-          href={requestHref}
-          className="inline-block rounded-lg bg-primary px-6 py-3 font-medium text-white hover:bg-primary-hover"
-        >
-          اطلب {service.name_ar} الآن
-        </Link>
+      {/* 8: الإجراء بحسب التوافر */}
+      <div className="flex flex-wrap justify-center gap-3" data-testid="service-actions">
+        {hasProviders ? (
+          <>
+            <Link href={quoteHref} className={primaryButton} data-testid="request-now">
+              اطلب عرض سعر
+            </Link>
+            <Link href={chooseHref} className={secondaryButton}>
+              اختر مكتبًا
+            </Link>
+          </>
+        ) : (
+          <Link href="/services" className={secondaryButton}>
+            تصفّح خدمات أخرى
+          </Link>
+        )}
       </div>
     </article>
   );

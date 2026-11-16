@@ -9,7 +9,7 @@ export const ROLE_HOME: Record<Role, string> = {
 
 export const ROLE_LABEL: Record<Role, string> = {
   requester: "طالب خدمة",
-  provider: "مزوّد خدمة",
+  provider: "مكتب تعقيب",
   admin: "الإدارة",
 };
 
@@ -55,7 +55,7 @@ export function navForRole(role: Role | null | undefined): NavItem[] {
       ];
     case "provider":
       return [
-        { href: ROLE_HOME.provider, label: "لوحة المزوّد" },
+        { href: ROLE_HOME.provider, label: "لوحة المكتب" },
         { href: "/dashboard/provider/requests", label: "الطلبات المتاحة" },
         { href: "/dashboard/provider/profile", label: "ملف المكتب" },
         { href: "/dashboard/provider/services", label: "خدماتي وأسعاري" },

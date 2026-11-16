@@ -135,7 +135,7 @@ export default async function ProviderRequestPage({
         <p data-testid="client-stats">
           <span className="text-muted">سجل العميل: </span>
           {clientStats?.avg_rating == null ? (
-            "لا تقييمات بعد"
+            "لا توجد تقييمات بعد"
           ) : (
             <>
               تقييمه <strong>{Number(clientStats.avg_rating).toFixed(1)}</strong>/5 (

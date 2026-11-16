@@ -55,7 +55,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   }
   await startSession(result.userId);
   revalidatePath("/", "layout");
-  redirect("/onboarding");
+  redirect(formData.get("as") === "provider" ? "/onboarding?as=provider" : "/onboarding");
 }
 
 export async function signIn(_prev: FormState, formData: FormData): Promise<FormState> {

@@ -7,7 +7,8 @@ import { OnboardingForm } from "./onboarding-form";
 
 export const metadata: Metadata = { title: "إكمال التسجيل" };
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }: PageProps<"/onboarding">) {
+  const { as } = await searchParams;
   const user = await requireUser();
   if (user.role) redirect(homePathForRole(user.role));
 
@@ -16,7 +17,7 @@ export default async function OnboardingPage() {
       <PageTitle subtitle="اختر كيف ستستخدم المنصة. لا يمكن تغيير هذا الاختيار لاحقاً من حسابك.">
         أهلاً {user.fullName}
       </PageTitle>
-      <OnboardingForm />
+      <OnboardingForm initialRole={as === "provider" ? "provider" : null} />
     </div>
   );
 }

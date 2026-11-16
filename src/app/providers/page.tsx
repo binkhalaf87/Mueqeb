@@ -10,7 +10,12 @@ import { getProviderStats } from "@/lib/providers/stats";
 import { rankProviders } from "@/lib/providers/ranking";
 import { Card, PageTitle, Select } from "@/components/ui";
 
-export const metadata: Metadata = { title: "مكاتب التعقيب" };
+export const metadata: Metadata = {
+  title: { absolute: "مكاتب التعقيب والخدمات العامة | مُعقّب" },
+  description:
+    "اختر الخدمة والمدينة للاطلاع على مكاتب التعقيب المتاحة على مُعقّب وتفاصيل خدماتها وتقييمات العملاء المتاحة.",
+  alternates: { canonical: "/providers" },
+};
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -40,11 +45,21 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
     }),
   );
   const selectedService = catalog.flatMap((c) => c.service_types).find((t) => t.id === serviceId);
+  const filtered = Boolean(serviceId || cityFilter);
+  // أسماء الخدمات المتاحة لكل مكتب (للبطاقة)
+  const serviceNames = new Map(
+    await Promise.all(
+      ranked.map(async (p) => {
+        const { data } = await db.rpc("public_provider_services", { p_provider_id: p.id });
+        return [p.id, (data ?? []).map((x) => x.service_name)] as const;
+      }),
+    ),
+  );
 
   return (
     <div className="space-y-6">
-      <PageTitle subtitle="مكاتب خدمات عامة مرخّصة تحققت المنصة من سجلها التجاري ورخصتها البلدية. قارن الأسعار والتقييمات ثم اطلب مباشرة.">
-        مكاتب التعقيب
+      <PageTitle subtitle="اختر الخدمة والمدينة للاطلاع على المكاتب المتاحة وتفاصيل خدماتها.">
+        ابحث عن مكتب تعقيب
       </PageTitle>
 
       <Card>
@@ -73,14 +88,17 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
             type="submit"
             className="rounded-lg bg-primary px-5 py-2 font-medium text-white hover:bg-primary-hover"
           >
-            بحث
+            عرض المكاتب
           </button>
         </form>
         {selectedService && (
           <p className="mt-3 text-sm text-muted">
-            السعر الاسترشادي لـ«{selectedService.name_ar}»:{" "}
-            {formatHalalas(selectedService.guide_min_halalas)} –{" "}
-            {formatHalalas(selectedService.guide_max_halalas)} (أتعاب فقط، دون الرسوم الحكومية)
+            <Link
+              href={`/services/${selectedService.slug}`}
+              className="text-primary hover:underline"
+            >
+              تفاصيل خدمة «{selectedService.name_ar}» ومتطلباتها
+            </Link>
           </p>
         )}
       </Card>
@@ -88,37 +106,58 @@ export default async function ProvidersPage({ searchParams }: PageProps<"/provid
       {!ranked.length ? (
         <Card>
           <p className="text-muted" data-testid="no-providers">
-            لا يوجد مزوّدون مطابقون حالياً.
+            {filtered
+              ? "لا توجد مكاتب تطابق خياراتك حاليًا. جرّب تغيير الخدمة أو المدينة."
+              : "لا توجد مكاتب متاحة للعرض حاليًا."}
           </p>
         </Card>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2" data-testid="providers-list">
-          {ranked.map((p) => (
-            <li key={p.id}>
-              <Link href={`/providers/${p.id}`} className="block h-full">
-                <Card className="h-full space-y-2 transition hover:border-primary">
+          {ranked.map((p) => {
+            const names = serviceNames.get(p.id) ?? [];
+            return (
+              <li key={p.id}>
+                <Card className="flex h-full flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold">{p.office_name}</h2>
+                    <h2 className="text-lg font-semibold">
+                      <Link href={`/providers/${p.id}`} className="hover:text-primary">
+                        {p.office_name}
+                      </Link>
+                    </h2>
                     <VerifiedBadge />
                   </div>
                   <p className="text-sm text-muted">{p.cities.join("، ")}</p>
+                  {names.length > 0 && (
+                    <p className="text-sm">
+                      الخدمات المتاحة: {names.slice(0, 3).join("، ")}
+                      {names.length > 3 && ` و${names.length - 3} غيرها`}
+                    </p>
+                  )}
                   <p className="flex flex-wrap items-center gap-x-3 text-sm">
-                    <Rating value={p.avgRating} count={p.reviewsCount} />
-                    <span className="text-muted">
-                      {p.completedOrders} طلب منجز
-                      {p.onTimePct !== null && ` · ${p.onTimePct}% في الموعد`}
-                    </span>
+                    <Rating
+                      value={p.avgRating}
+                      count={p.avgRating == null ? undefined : p.reviewsCount}
+                    />
+                    {p.completedOrders > 0 && (
+                      <span className="text-muted">{p.completedOrders} طلب مكتمل عبر المنصة</span>
+                    )}
                   </p>
-                  {p.bio && <p className="line-clamp-2 text-sm">{p.bio}</p>}
-                  <p className="text-sm">
-                    {selectedService ? "أتعاب الخدمة تبدأ من " : "الأسعار تبدأ من "}
-                    <strong>{formatHalalas(p.from_fee_halalas)}</strong>
-                    {!selectedService && ` · ${p.services_count} خدمة`}
-                  </p>
+                  {p.from_fee_halalas ? (
+                    <p className="text-sm">
+                      {selectedService ? "أتعابه المعلنة لهذه الخدمة: " : "أسعاره المعلنة من "}
+                      <strong>{formatHalalas(p.from_fee_halalas)}</strong>
+                    </p>
+                  ) : null}
+                  <Link
+                    href={`/providers/${p.id}`}
+                    className="mt-auto self-start text-sm font-medium text-primary hover:underline"
+                  >
+                    عرض ملف المكتب ←
+                  </Link>
                 </Card>
-              </Link>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

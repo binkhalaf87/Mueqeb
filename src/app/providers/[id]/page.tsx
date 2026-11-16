@@ -8,7 +8,7 @@ import { formatHalalas } from "@/lib/money";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { getProviderStats } from "@/lib/providers/stats";
 import { Rating } from "@/components/rating";
-import { VerifiedBadge } from "@/components/verified-badge";
+import { VerificationDetails, VerifiedBadge } from "@/components/verified-badge";
 import { Card } from "@/components/ui";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,7 +25,7 @@ export async function generateMetadata({
   params,
 }: PageProps<"/providers/[id]">): Promise<Metadata> {
   const provider = await getPublicProvider((await params).id);
-  return { title: provider?.office_name ?? "مزوّد غير موجود" };
+  return { title: provider?.office_name ?? "مكتب غير موجود" };
 }
 
 export default async function PublicProviderPage({ params }: PageProps<"/providers/[id]">) {
@@ -56,16 +56,7 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
           <VerifiedBadge />
           <Rating value={stats?.avg_rating} count={stats?.reviews_count} />
         </div>
-        <p
-          className="max-w-3xl rounded-lg bg-primary-soft px-3 py-2 text-sm"
-          data-testid="provider-license"
-        >
-          مكتب خدمات عامة مرخّص: تحققت المنصة من سجله التجاري ورخصته البلدية وهوية المسؤول
-          {provider.approved_since
-            ? ` (موثّق منذ ${new Date(provider.approved_since).toLocaleDateString("ar-SA-u-ca-gregory", { year: "numeric", month: "long" })})`
-            : ""}
-          .
-        </p>
+        <VerificationDetails verifiedAt={provider.approved_since} />
         <p className="text-muted">يخدم: {provider.cities.join("، ")}</p>
         {provider.bio && <p className="max-w-3xl whitespace-pre-line">{provider.bio}</p>}
       </section>

@@ -39,7 +39,7 @@ async function createSubmittedProvider(page: Page, officeName: string, city: str
   }
 
   await page.goto("/dashboard/provider/services");
-  await page.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخصة عمل" });
+  await page.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
   // لا حد أدنى للأتعاب: يظهر النطاق الاسترشادي فقط، ويُقبل أي سعر موجب
   await expect(page.getByTestId("fee-guide")).toContainText("النطاق الاسترشادي: 150 ر.س – 300 ر.س");
   await expect(page.getByTestId("fee-guide")).not.toContainText("الحد الأدنى");
@@ -104,11 +104,11 @@ test("مزوّد غير معتمد مخفي، ويظهر بعد الاعتماد
 
   await visitor.goto(`/providers/${providerId}`);
   await expect(visitor.getByRole("heading", { name: officeName })).toBeVisible();
-  await expect(visitor.getByText("مكتب مرخّص موثّق")).toBeVisible();
-  await expect(visitor.getByTestId("provider-services")).toContainText("إصدار أو تجديد رخصة عمل");
+  await expect(visitor.getByTestId("provider-license")).toContainText("تم التحقق من بيانات المكتب");
+  await expect(visitor.getByTestId("provider-services")).toContainText("إصدار أو تجديد رخص العمل");
   await expect(visitor.getByTestId("provider-services")).toContainText("175.50 ر.س");
   await expect(visitor.getByTestId("provider-services")).toContainText("3 يوم");
-  await expect(visitor.getByTestId("provider-stats")).toContainText("لا تقييمات بعد");
+  await expect(visitor.getByTestId("provider-stats")).toContainText("لا توجد تقييمات بعد");
 
   // الإيقاف يخفيه مجدداً
   await adminPage.getByLabel("سبب الإيقاف").fill("مراجعة شكوى");

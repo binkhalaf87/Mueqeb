@@ -53,7 +53,7 @@ test("معيار القبول: التقييم بعد الإكمال فقط، و�
 
   await visitor.reload();
   await expect(visitor.getByTestId("provider-reviews")).toContainText(comment);
-  await expect(visitor.getByTestId("provider-rating")).not.toContainText("لا تقييمات");
+  await expect(visitor.getByTestId("provider-rating")).not.toContainText("لا توجد تقييمات");
 
   // لا يمكن التقييم مرة أخرى (لا نموذج)
   await expect(requester.getByTestId("review-form")).toHaveCount(0);
@@ -71,9 +71,9 @@ test("صفحة المكتب وبطاقة المقارنة تعرضان الإح�
   // الإنجاز (منجزات وتقييمات) قبل المسار (بلا سجل)
   expect(first).toBeGreaterThanOrEqual(0);
   expect(first).toBeLessThan(lower);
-  await expect(cards.nth(first)).toContainText("طلب منجز");
+  await expect(cards.nth(first)).toContainText("طلب مكتمل عبر المنصة");
 
-  await cards.nth(first).getByRole("link").click();
+  await cards.nth(first).getByRole("link", { name: "عرض ملف المكتب ←" }).click();
   const stats = page.getByTestId("provider-stats");
   await expect(stats).toContainText("التقييم");
   await expect(stats).toContainText("الالتزام بالموعد");
@@ -87,7 +87,7 @@ test("صفحة المكتب وبطاقة المقارنة تعرضان الإح�
   // طلب seed هو أقدم طلب مفتوح (القائمة مرتبة من الأحدث، واختبارات أخرى تنشئ طلبات بالتوازي)
   await requester.getByTestId("my-requests").getByRole("link", { name: /مفتوح/ }).last().click();
   const row = requester.getByTestId("bid-row").filter({ hasText: "مكتب الإنجاز للخدمات العامة" });
-  await expect(row.getByTestId("bid-rating")).not.toContainText("لا تقييمات");
+  await expect(row.getByTestId("bid-rating")).not.toContainText("لا توجد تقييمات");
 });
 
 test("المزوّد يرى سجل العميل بلا هوية عند تقديم العرض", async ({ page }) => {

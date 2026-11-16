@@ -27,9 +27,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function RequesterRequestPage({
   params,
+  searchParams,
 }: PageProps<"/dashboard/requester/requests/[id]">) {
   await requireRole("requester");
   const { id } = await params;
+  const { created } = await searchParams;
   if (!UUID.test(id)) notFound();
   const db = await getDb();
 
@@ -124,6 +126,15 @@ export default async function RequesterRequestPage({
           {request.service_types?.name_ar} <RequestStatusBadge status={request.status} />
         </span>
       </PageTitle>
+      {created === "1" && (
+        <p
+          role="status"
+          className="rounded-lg bg-primary-soft px-3 py-2 text-sm"
+          data-testid="request-created"
+        >
+          تم إرسال طلبك. يمكنك متابعة حالته من صفحة الطلب.
+        </p>
+      )}
 
       {awarded && (
         <Card className="border-primary" data-testid="awarded-bid">
@@ -244,7 +255,7 @@ export default async function RequesterRequestPage({
                         {b.duration_days} يوم
                         {open && b.duration_days === fastest && activeBids.length > 1 && (
                           <Badge tone="info" className="ms-1">
-                            الأسرع
+                            أقصر مدة
                           </Badge>
                         )}
                       </td>
@@ -280,8 +291,7 @@ export default async function RequesterRequestPage({
             </div>
           )}
           <p className="border-t border-border px-6 py-3 text-xs text-muted">
-            العروض مغلقة: لا يرى أي مكتب عروض غيره. التقييمات من طلبات مكتملة ومدفوعة عبر المنصة
-            فقط.
+            لا يرى أي مكتب عروض المكاتب الأخرى. التقييمات من طلبات مكتملة ومدفوعة عبر المنصة فقط.
           </p>
         </Card>
       )}

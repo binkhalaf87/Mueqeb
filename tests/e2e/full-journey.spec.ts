@@ -54,12 +54,12 @@ test("المسار الكامل: من تسجيل المنشأة حتى صرف م
 
   // 2) طلب عام
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخصة عمل" });
+  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
   await requester.getByLabel("صورة إقامة العامل").check();
   await requester.getByLabel("المدينة").selectOption("الرياض");
   await requester.getByLabel("وصف الطلب").fill(description);
   await requester.getByRole("button", { name: "انشر الطلب" }).click();
-  await expect(requester).toHaveURL(/\/dashboard\/requester\/requests\/[0-9a-f-]{36}$/);
+  await expect(requester).toHaveURL(/\/dashboard\/requester\/requests\/[0-9a-f-]{36}\?created=1$/);
   await expect(requester.getByTestId("request-status")).toHaveText("مفتوح");
   const requestId = new URL(requester.url()).pathname.split("/").pop()!;
 

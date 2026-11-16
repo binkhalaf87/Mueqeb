@@ -7,9 +7,9 @@ import { Button, Card, Field, FormMessage } from "@/components/ui";
 type Role = "requester" | "provider";
 type AccountType = "individual" | "establishment";
 
-export function OnboardingForm() {
+export function OnboardingForm({ initialRole = null }: { initialRole?: Role | null }) {
   const [state, action, pending] = useActionState<FormState, FormData>(completeOnboarding, {});
-  const [role, setRole] = useState<Role | null>(null);
+  const [role, setRole] = useState<Role | null>(initialRole);
   const [accountType, setAccountType] = useState<AccountType>("individual");
 
   return (
@@ -32,7 +32,7 @@ export function OnboardingForm() {
           checked={role === "provider"}
           onChange={() => setRole("provider")}
           title="أقدّم خدمة"
-          description="أمثّل مكتب خدمات عامة مرخّصاً وأرغب باستقبال الطلبات."
+          description="أمثّل مكتب خدمات عامة وأرغب باستقبال طلبات المنشآت."
         />
       </fieldset>
       {state.errors?.role && <p className="text-sm text-danger">اختر نوع الاستخدام.</p>}

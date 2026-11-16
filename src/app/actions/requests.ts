@@ -51,12 +51,12 @@ export async function createRequest(_prev: FormState, formData: FormData): Promi
   });
   if (error || !requestId) {
     return {
-      message: rpcErrorMessage(error ?? { message: "" }, "تعذّر إنشاء الطلب، حاول مرة أخرى."),
+      message: rpcErrorMessage(error ?? { message: "" }, "تعذّر إرسال الطلب. حاول مرة أخرى."),
     };
   }
 
   revalidateRequestPages();
-  redirect(`/dashboard/requester/requests/${requestId}`);
+  redirect(`/dashboard/requester/requests/${requestId}?created=1`);
 }
 
 export async function acceptBid(_prev: FormState, formData: FormData): Promise<FormState> {

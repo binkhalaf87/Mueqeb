@@ -109,10 +109,11 @@ export function RequestForm({
               </p>
             ) : (
               <p>
-                السعر الاسترشادي لأتعاب هذه الخدمة:{" "}
+                نطاق تقديري تضعه المنصة لأتعاب هذه الخدمة:{" "}
                 <strong>
                   {formatHalalas(service.guideMin)} – {formatHalalas(service.guideMax)}
                 </strong>
+                . ليس سعراً من مكتب؛ الأتعاب الفعلية تظهر في العروض.
               </p>
             )}
             <p className="text-muted">
@@ -120,8 +121,9 @@ export function RequestForm({
             </p>
             {service.delegation !== "none" && (
               <p className="text-muted">
-                سيحتاج المكتب تفويضاً عبر منصة {DELEGATION_LABEL[service.delegation]} بعد الترسية.
-                لن نطلب منك أبداً كلمة مرور أو رمز تحقق لحساباتك الحكومية.
+                تعتمد طريقة التفويض أو منح الصلاحية على الخدمة والمنصة المختصة (
+                {DELEGATION_LABEL[service.delegation]})، ويوضحها المكتب بعد اختيار عرضه. استخدم
+                القنوات الرسمية فقط، ولا تشارك كلمة المرور أو رمز التحقق لحساباتك الحكومية.
               </p>
             )}
           </div>
@@ -143,9 +145,7 @@ export function RequestForm({
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-muted">
-              يراها المزوّدون كقائمة فقط؛ لا ترفع ملفات الآن.
-            </p>
+            <p className="mt-1 text-xs text-muted">تراها المكاتب كقائمة فقط؛ لا ترفع ملفات الآن.</p>
           </fieldset>
         )}
 
@@ -183,7 +183,7 @@ export function RequestForm({
           name="description"
           rows={4}
           maxLength={1000}
-          hint="يراه المزوّدون قبل الترسية. لا تكتب اسمك أو أرقام تواصل أو روابط."
+          hint="تراه المكاتب قبل اختيار العرض. لا تكتب اسمك أو أرقام تواصل أو روابط."
           error={state.errors?.description}
         />
         <TextArea
@@ -191,7 +191,7 @@ export function RequestForm({
           name="privateNotes"
           rows={3}
           maxLength={2000}
-          hint="لا يراها إلا المكتب الذي تختاره، بعد الترسية فقط."
+          hint="لا يراها إلا المكتب الذي تختار عرضه، بعد اختياره فقط."
           error={state.errors?.privateNotes}
         />
       </Card>

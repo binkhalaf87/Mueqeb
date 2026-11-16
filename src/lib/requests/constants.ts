@@ -59,18 +59,18 @@ export const BID_STATUS_LABEL: Record<BidStatus, string> = {
 /** رسائل أخطاء دوال الطلبات والعروض في قاعدة البيانات */
 const RPC_ERRORS: Record<string, string> = {
   contact_info_not_allowed:
-    "لا تكتب أرقام جوال أو بريداً إلكترونياً أو روابط. التواصل داخل المنصة فقط حتى الترسية.",
+    "لا تكتب أرقام جوال أو بريداً إلكترونياً أو روابط. التواصل داخل المنصة فقط حتى اختيار العرض.",
   credentials_not_allowed:
     "لا تطلب ولا تكتب كلمات مرور أو رموز تحقق للحسابات الحكومية. التفويض يتم عبر المنصات الرسمية فقط.",
   invalid_available_docs: "اختر المستندات من القائمة فقط.",
-  provider_does_not_offer_service: "هذا المزوّد لا يقدّم الخدمة حالياً.",
+  provider_does_not_offer_service: "هذا المكتب لا يقدّم الخدمة حالياً.",
   service_type_not_found: "الخدمة غير متاحة.",
   fee_below_minimum: "الأتعاب أقل من الحد الأدنى لهذه الخدمة.",
   bids_limit_reached: "اكتمل العدد الأقصى للعروض على هذا الطلب.",
   bids_deadline_passed: "انتهت مهلة تقديم العروض.",
   request_not_open: "الطلب لم يعد مفتوحاً.",
   request_not_found: "الطلب غير متاح.",
-  bid_locked: "لا يمكن تعديل العرض بعد الترسية.",
+  bid_locked: "لا يمكن تعديل العرض بعد اختياره.",
   bid_not_available: "هذا العرض لم يعد متاحاً.",
   provider_not_approved: "يجب اعتماد مكتبك قبل تقديم العروض.",
   invalid_transition: "لا يمكن تنفيذ هذا الإجراء في حالة الطلب الحالية.",

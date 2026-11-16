@@ -152,7 +152,7 @@ test("المسار الكامل: من تسجيل المنشأة حتى صرف م
 
   await winner.goto("/dashboard/notifications");
   const winnerNotes = winner.getByTestId("notifications");
-  await expect(winnerNotes).toContainText("تمت ترسية طلب عليك");
+  await expect(winnerNotes).toContainText("اختار العميل عرضك");
   await expect(winnerNotes).toContainText("دفع العميل");
   await expect(winnerNotes).toContainText("تم صرف مستحقاتك");
   await expect(winnerNotes).toContainText(ref);

@@ -145,7 +145,7 @@ export default async function ProviderRequestPage({
 
       {awardedToMe && details && (
         <Card className="space-y-1 border-primary text-sm" data-testid="client-details">
-          <h2 className="font-semibold">رُسي الطلب عليك — بيانات العميل</h2>
+          <h2 className="font-semibold">اختار العميل عرضك — بيانات العميل</h2>
           <p>الاسم: {details.contact_name}</p>
           {details.establishment_name && (
             <p>

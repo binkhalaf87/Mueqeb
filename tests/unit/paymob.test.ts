@@ -75,6 +75,7 @@ describe("PaymobGateway checkout", () => {
     });
 
     expect(session.providerRef).toMatch(/^mq_[0-9a-f]{32}$/);
+    expect(session.gatewayRef).toBe("pi_test");
     const redirect = new URL(session.redirectUrl);
     expect(redirect.origin + redirect.pathname).toBe("https://ksa.paymob.com/unifiedcheckout/");
     expect(redirect.searchParams.get("publicKey")).toBe(config.publicKey);
@@ -191,5 +192,102 @@ describe("PaymobGateway refund", () => {
     await expect(
       failing.refund({ providerRef: "mq_1", gatewayPaymentId: "1", amountHalalas: 1 }),
     ).rejects.toThrow();
+  });
+});
+
+describe("PaymobGateway fallback lookup (fetchPayment)", () => {
+  const ref = "mq_abc123";
+  /** يرد بحسب المسار: خريطة بادئة المسار ← الرد */
+  function routes(map: Record<string, unknown>) {
+    return vi.fn(async (url: string) => {
+      const path = new URL(url).pathname;
+      const key = Object.keys(map).find((k) => path.startsWith(k));
+      return key ? Response.json(map[key]) : new Response("not found", { status: 404 });
+    });
+  }
+
+  it("settles a successful transaction found by our reference", async () => {
+    const fetchMock = routes({ "/v1/transactions/": { results: [transaction()] } });
+    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
+    const event = await gateway.fetchPayment(ref);
+    expect(event).toMatchObject({
+      status: "paid",
+      providerRef: ref,
+      gatewayPaymentId: "987654",
+      amountHalalas: 22050,
+      currency: "SAR",
+      eventId: "paymob_987654_paid",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain(`special_reference=${ref}`);
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      `Token ${config.secretKey}`,
+    );
+  });
+
+  it("uses the intention first and accepts its transactions by the intention reference", async () => {
+    const tx = transaction({ order: { id: 555, merchant_order_id: null } });
+    const fetchMock = routes({
+      "/v1/intention/": { id: "pi_1", special_reference: ref, transactions: [tx] },
+    });
+    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
+    const event = await gateway.fetchPayment(ref, "pi_1");
+    expect(event?.status).toBe("paid");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/v1/intention/pi_1/");
+  });
+
+  it("falls through 404s to the next known path", async () => {
+    const fetchMock = routes({ "/api/acceptance/transactions/": [transaction()] });
+    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
+    expect((await gateway.fetchPayment(ref))?.status).toBe("paid");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("ignores other apps' transactions, keeps pending ones open, and maps refunds", async () => {
+    const foreign = transaction({ order: { id: 1, merchant_order_id: "jobai_77" } });
+    let gateway = new PaymobGateway(
+      config,
+      routes({ "/v1/transactions/": { results: [foreign] } }) as unknown as typeof fetch,
+    );
+    expect(await gateway.fetchPayment(ref)).toBeNull();
+
+    gateway = new PaymobGateway(
+      config,
+      routes({
+        "/v1/transactions/": { results: [transaction({ pending: true, success: false })] },
+      }) as unknown as typeof fetch,
+    );
+    expect(await gateway.fetchPayment(ref)).toBeNull();
+
+    gateway = new PaymobGateway(
+      config,
+      routes({
+        "/v1/transactions/": { results: [transaction({ is_refunded: true })] },
+      }) as unknown as typeof fetch,
+    );
+    expect((await gateway.fetchPayment(ref))?.status).toBe("refunded");
+
+    // مرجع ليس من مُعقّب: لا استعلام أصلاً
+    const none = vi.fn();
+    gateway = new PaymobGateway(config, none as unknown as typeof fetch);
+    expect(await gateway.fetchPayment("jobai_1")).toBeNull();
+    expect(none).not.toHaveBeenCalled();
+  });
+});
+
+describe("PaymobGateway webhook with an intention-level reference", () => {
+  it("reads the reference from the intention when the transaction has none", async () => {
+    const tx = transaction({ order: { id: 555, merchant_order_id: null } });
+    const body = JSON.stringify({
+      type: "TRANSACTION",
+      obj: tx,
+      intention: { special_reference: "mq_x1" },
+    });
+    const url = new URL(
+      `https://mueqeb.test/api/payments/webhook?hmac=${paymobHmac(tx, config.hmacSecret)}`,
+    );
+    const gateway = new PaymobGateway(config);
+    const event = await gateway.verifyWebhook(body, new Headers(), url);
+    expect(event).toMatchObject({ providerRef: "mq_x1", status: "paid" });
   });
 });

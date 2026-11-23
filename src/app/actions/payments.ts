@@ -64,13 +64,20 @@ export async function startPayment(_prev: FormState, formData: FormData): Promis
       callbackUrl: `${await appOrigin()}/api/payments/return?request=${requestId}`,
       customer: { name: user.fullName, email: user.email, phone: user.phone },
     });
-    const { error } = await serviceDb().rpc("register_payment_attempt", {
+    const { data: paymentId, error } = await serviceDb().rpc("register_payment_attempt", {
       p_order_id: order.id,
       p_gateway: provider.name,
       p_provider_ref: session.providerRef,
       p_amount_halalas: order.total_paid_halalas,
     });
     if (error) throw error;
+    if (session.gatewayRef && paymentId) {
+      // للاستعلام الاحتياطي من البوابة إن لم يصل إشعارها
+      await serviceDb().query(
+        "update public.payments set gateway_intention_id = $2 where id = $1",
+        [paymentId, session.gatewayRef.slice(0, 200)],
+      );
+    }
     redirectUrl = session.redirectUrl;
   } catch (err) {
     logError("start payment", err);

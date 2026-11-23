@@ -6,6 +6,7 @@
  */
 import { dbFor, SERVICE } from "@/lib/db/core";
 import { deliverPendingNotifications } from "@/lib/notifications/deliver";
+import { reconcileStalePayments } from "@/lib/payments/process";
 import { logError } from "@/lib/log";
 
 const TICK_MS = 60_000;
@@ -66,6 +67,8 @@ export function startScheduler() {
     await runDueJobs().catch((err) => logError("scheduler tick", err));
     // الإشعارات الخارجية (البريد) من صندوق الإرسال
     await deliverPendingNotifications().catch((err) => logError("notification delivery", err));
+    // الاستعلام الاحتياطي عن الدفعات التي لم يصل إشعار بوابتها (كل 5 دقائق)
+    await reconcileStalePayments().catch((err) => logError("payment reconcile", err));
   };
   state.__mueqebScheduler = setInterval(tick, TICK_MS);
   state.__mueqebScheduler.unref?.();

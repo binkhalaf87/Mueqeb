@@ -189,6 +189,7 @@ export type Database = {
           paid_at: string | null;
           refunded_at: string | null;
           refunded_halalas: number;
+          gateway_intention_id: string | null;
         };
       };
       profiles: {

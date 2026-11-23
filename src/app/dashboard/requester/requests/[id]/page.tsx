@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
+import { reconcilePendingPayment } from "@/lib/payments/process";
 import { getDb } from "@/lib/db/server";
 import type { Tables } from "@/lib/db/types";
 import { formatHalalas } from "@/lib/money";
@@ -37,6 +38,8 @@ export default async function RequesterRequestPage({
   const { id } = await params;
   const { created, attachmentsFailed } = await searchParams;
   if (!UUID.test(id)) notFound();
+  // إن بقيت محاولة دفع معلّقة ولم يصل إشعار البوابة: تحقق مباشر منها (لا يُسقط الصفحة)
+  await reconcilePendingPayment(id);
   const db = await getDb();
 
   const request = await db.maybeOne<

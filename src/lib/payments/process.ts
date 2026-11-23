@@ -138,3 +138,73 @@ export async function refundAtGateway(orderId: string, amountHalalas: number) {
   });
   return refund.refundRef;
 }
+
+// ============ الاستعلام الاحتياطي عن الدفع (حين لا يصل إشعار البوابة) ============
+
+type PendingAttempt = { provider_ref: string; gateway_intention_id: string | null };
+
+/** آخر فحص لكل محاولة: يحدّ الاستعلام من البوابة إلى مرة كل 30 ثانية لكل محاولة */
+const lastChecked = new Map<string, number>();
+const CHECK_INTERVAL_MS = 30_000;
+
+async function checkAttempt(attempt: PendingAttempt): Promise<PaymentOutcome | null> {
+  const now = Date.now();
+  if (now - (lastChecked.get(attempt.provider_ref) ?? 0) < CHECK_INTERVAL_MS) return null;
+  lastChecked.set(attempt.provider_ref, now);
+  if (lastChecked.size > 1000) lastChecked.clear();
+
+  const provider = getPaymentProvider();
+  const event = await provider.fetchPayment(attempt.provider_ref, attempt.gateway_intention_id);
+  return event ? applyPaymentEvent(event) : null;
+}
+
+/**
+ * يتحقق من البوابة مباشرة من آخر محاولة دفع غير محسومة لطلب (عند فتح صفحة الطلب أو الدفع
+ * أو عودة العميل من البوابة). لا يرمي أبداً: فشله يُسجَّل فقط ولا يُسقط الصفحة.
+ */
+export async function reconcilePendingPayment(
+  requestId: string,
+  /** عند فتح الصفحات ننتظر قليلاً بعد بدء المحاولة؛ عند العودة من البوابة نتحقق فوراً */
+  minAgeSeconds = 20,
+): Promise<PaymentOutcome | null> {
+  try {
+    const attempt = await serviceDb().maybeOne<PendingAttempt>(
+      `select p.provider_ref, p.gateway_intention_id
+       from public.payments p join public.orders o on o.id = p.order_id
+       where o.request_id = $1 and p.status = 'initiated'
+         and p.created_at <= now() - make_interval(secs => $2)
+         and p.created_at > now() - interval '48 hours'
+       order by p.created_at desc limit 1`,
+      [requestId, minAgeSeconds],
+    );
+    return attempt ? await checkAttempt(attempt) : null;
+  } catch (err) {
+    logError("payment reconcile (request)", err);
+    return null;
+  }
+}
+
+const sweepState = globalThis as unknown as { __mueqebPaymentSweepAt?: number };
+const SWEEP_INTERVAL_MS = 5 * 60_000;
+
+/** من المُجدول: محاولات معلّقة (بين دقيقتين و48 ساعة) كل 5 دقائق، 20 كحد أقصى لكل مرة */
+export async function reconcileStalePayments(now = Date.now()) {
+  if (now - (sweepState.__mueqebPaymentSweepAt ?? 0) < SWEEP_INTERVAL_MS) return 0;
+  sweepState.__mueqebPaymentSweepAt = now;
+  const attempts = await serviceDb().query<PendingAttempt>(
+    `select provider_ref, gateway_intention_id from public.payments
+     where status = 'initiated'
+       and created_at < now() - interval '2 minutes'
+       and created_at > now() - interval '48 hours'
+     order by created_at desc limit 20`,
+  );
+  let settled = 0;
+  for (const attempt of attempts) {
+    try {
+      if (await checkAttempt(attempt)) settled += 1;
+    } catch (err) {
+      logError("payment reconcile (sweep)", err);
+    }
+  }
+  return settled;
+}

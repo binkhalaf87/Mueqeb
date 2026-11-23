@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
+import { reconcilePendingPayment } from "@/lib/payments/process";
 import { getDb } from "@/lib/db/server";
 import type { Enums, Tables } from "@/lib/db/types";
 import { getMyProvider } from "@/lib/providers/queries";
@@ -30,6 +31,8 @@ export default async function ProviderRequestPage({
   const user = await requireRole("provider");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
+  // إن بقيت محاولة دفع معلّقة ولم يصل إشعار البوابة: تحقق مباشر منها (لا يُسقط الصفحة)
+  await reconcilePendingPayment(id);
   const provider = await getMyProvider(user.id);
   if (provider?.verification_status !== "approved") notFound();
 

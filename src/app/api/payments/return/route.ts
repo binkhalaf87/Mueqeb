@@ -1,8 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getPaymentProvider } from "@/lib/payments";
-import { applyPaymentEvent } from "@/lib/payments/process";
-import { serviceDb } from "@/lib/db/server";
-import { logError } from "@/lib/log";
+import { reconcilePendingPayment } from "@/lib/payments/process";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,23 +14,8 @@ export async function GET(request: NextRequest) {
     return redirectTo(request, "/dashboard/requester");
   }
 
-  try {
-    // آخر محاولة دفع لم تُحسم بعد لهذا الطلب
-    const provider = getPaymentProvider();
-    const pending = await serviceDb().maybeOne<{ provider_ref: string }>(
-      `select p.provider_ref
-       from public.payments p join public.orders o on o.id = p.order_id
-       where o.request_id = $1 and p.status = 'initiated'
-       order by p.created_at desc limit 1`,
-      [requestId],
-    );
-    if (pending) {
-      const event = await provider.fetchPayment(pending.provider_ref);
-      if (event) await applyPaymentEvent(event);
-    }
-  } catch (err) {
-    logError("payment return verification", err);
-  }
+  // عودة العميل: تحقق مباشر من البوابة (لا يرمي؛ الـ webhook يبقى المصدر الأساسي)
+  await reconcilePendingPayment(requestId, 0);
 
   return redirectTo(request, `/dashboard/requester/requests/${requestId}?payment=return`);
 }

@@ -17,6 +17,8 @@ export type CheckoutInput = {
 export type CheckoutSession = {
   providerRef: string;
   redirectUrl: string;
+  /** معرّف الجلسة لدى البوابة (Paymob intention) للاستعلام الاحتياطي */
+  gatewayRef?: string;
 };
 
 /** حدث موحّد من البوابة بعد التحقق منه */
@@ -43,8 +45,8 @@ export interface PaymentProvider {
   createCheckout(input: CheckoutInput): Promise<CheckoutSession>;
   /** يتحقق من التوقيع ويعيد الحدث، أو يرمي WebhookVerificationError */
   verifyWebhook(rawBody: string, headers: Headers, url?: URL): Promise<PaymentEvent>;
-  /** يستعلم من البوابة مباشرة عن حالة الدفع (null إن لم تدعمه) */
-  fetchPayment(providerRef: string): Promise<PaymentEvent | null>;
+  /** يستعلم من البوابة مباشرة عن حالة الدفع (null إن لم تدعمه أو لم تُحسم بعد) */
+  fetchPayment(providerRef: string, gatewayRef?: string | null): Promise<PaymentEvent | null>;
   /** استرداد كامل؛ يرمي عند الفشل */
   refund(payment: {
     providerRef: string;

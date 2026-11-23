@@ -240,11 +240,14 @@ describe.skipIf(!available)("security review (local Postgres)", () => {
       "public.ledger_entries",
       "storage.objects",
     ];
+    // الاستثناء الوحيد المقصود: المرفقات التوضيحية للطلب العام المفتوح يراها كل مكتب يرى الطلب
+    // (قرار صاحب المنصة). أي مستند آخر مشترك بين مكتبين خلل.
+    const attachment = (row: string) => row.includes("request_attachment");
     const overlaps: string[] = [];
     for (const table of privateTables) {
       const [a, b] = await Promise.all([visibleRows(p3, table), visibleRows(p4, table)]);
       const seen = new Set(a ?? []);
-      const shared = (b ?? []).filter((r) => seen.has(r));
+      const shared = (b ?? []).filter((r) => seen.has(r) && !attachment(r));
       if (shared.length) overlaps.push(`${table}: ${shared.length}`);
     }
     expect(overlaps).toEqual([]);

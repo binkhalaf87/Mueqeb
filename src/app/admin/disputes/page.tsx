@@ -19,10 +19,10 @@ export default async function DisputesPage() {
     status: Enums<"request_status">;
     service_name: string;
   }>(
-    `select d.request_id, d.reason, d.opened_at, r.status, t.name_ar as service_name
+    `select d.request_id, d.reason, d.opened_at, r.status, coalesce(t.name_ar, r.title) as service_name
      from public.disputes d
      join public.service_requests r on r.id = d.request_id
-     join public.service_types t on t.id = r.service_type_id
+     left join public.service_types t on t.id = r.service_type_id
      order by d.opened_at desc`,
   );
 

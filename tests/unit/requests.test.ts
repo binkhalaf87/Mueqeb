@@ -52,37 +52,44 @@ describe("createRequestSchema", () => {
   const base = {
     mode: "public",
     accountId: uuid,
-    serviceTypeId: uuid,
+    title: "نقل كفالة عامل من منشأة أخرى",
+    authority: "قوى",
     city: "الرياض",
     urgency: "normal",
     description: "إصدار رخص عمل لعمال جدد",
     availableDocs: [],
   };
+  const direct = { ...base, mode: "direct_quote", serviceTypeId: uuid, providerId: uuid };
 
-  it("accepts a valid public request", () => {
+  it("accepts a general public request without a service", () => {
     expect(createRequestSchema.safeParse(base).success).toBe(true);
+    // المدينة نص حر في الطلب العام
+    expect(createRequestSchema.safeParse({ ...base, city: "رفحاء" }).success).toBe(true);
   });
 
-  it("requires a description for public requests and a provider for direct ones", () => {
+  it("requires a title, an authority and a description for public requests", () => {
+    expect(createRequestSchema.safeParse({ ...base, title: "" }).success).toBe(false);
+    expect(createRequestSchema.safeParse({ ...base, authority: "" }).success).toBe(false);
     expect(createRequestSchema.safeParse({ ...base, description: "قصير" }).success).toBe(false);
-    expect(
-      createRequestSchema.safeParse({ ...base, mode: "direct_quote", description: "" }).success,
-    ).toBe(false);
-    expect(
-      createRequestSchema.safeParse({
-        ...base,
-        mode: "direct_quote",
-        description: "",
-        providerId: uuid,
-      }).success,
-    ).toBe(true);
   });
 
-  it("rejects unknown cities, contact info and credential requests", () => {
-    expect(createRequestSchema.safeParse({ ...base, city: "لندن" }).success).toBe(false);
+  it("requires a provider, a service and a listed city for direct requests", () => {
+    expect(createRequestSchema.safeParse({ ...direct, description: "" }).success).toBe(true);
+    expect(createRequestSchema.safeParse({ ...direct, providerId: undefined }).success).toBe(false);
+    expect(createRequestSchema.safeParse({ ...direct, serviceTypeId: "" }).success).toBe(false);
+    expect(createRequestSchema.safeParse({ ...direct, city: "لندن" }).success).toBe(false);
+  });
+
+  it("rejects contact info and credential requests in every visible field", () => {
     expect(
       createRequestSchema.safeParse({ ...base, description: "تواصل 0551234567 الآن" }).success,
     ).toBe(false);
+    expect(
+      createRequestSchema.safeParse({ ...base, title: "اتصل 0551234567 للتفاصيل" }).success,
+    ).toBe(false);
+    expect(createRequestSchema.safeParse({ ...base, authority: "كلمة المرور قوى" }).success).toBe(
+      false,
+    );
     expect(
       createRequestSchema.safeParse({ ...base, privateNotes: "كلمة المرور لحساب قوى هي" }).success,
     ).toBe(false);

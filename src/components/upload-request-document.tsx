@@ -9,20 +9,26 @@ import { FormMessage, SecondaryButton } from "@/components/ui";
 export function UploadRequestDocument({
   requestId,
   labels,
+  defaultLabel = "إثبات الإنجاز",
+  kind,
+  hint = "ارفع المستندات اللازمة لهذا الطلب فقط. لا ترفق كلمات مرور أو رموز تحقق.",
   testId,
 }: {
   requestId: string;
-  /** أسماء المستندات المقترحة؛ إن كانت فارغة يُكتب الاسم يدوياً */
+  /** أسماء المستندات المقترحة؛ إن كانت فارغة يُستخدم defaultLabel */
   labels: string[];
+  defaultLabel?: string;
+  /** request_attachment: مرفق توضيحي والطلب مفتوح */
+  kind?: "request_attachment";
+  hint?: string;
   testId?: string;
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(uploadRequestDocument, {});
   return (
     <form action={action} className="space-y-2" data-testid={testId}>
       <input type="hidden" name="requestId" value={requestId} />
-      <p className="text-xs text-muted">
-        ارفع المستندات اللازمة لهذا الطلب فقط. لا ترفق كلمات مرور أو رموز تحقق.
-      </p>
+      {kind && <input type="hidden" name="kind" value={kind} />}
+      <p className="text-xs text-muted">{hint}</p>
       <div className="flex flex-wrap items-center gap-2">
         {labels.length > 0 ? (
           <select
@@ -38,7 +44,7 @@ export function UploadRequestDocument({
             <option value="مستند إضافي">مستند إضافي</option>
           </select>
         ) : (
-          <input type="hidden" name="label" value="إثبات الإنجاز" />
+          <input type="hidden" name="label" value={defaultLabel} />
         )}
         <input
           type="file"

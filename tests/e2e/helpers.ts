@@ -71,3 +71,13 @@ export async function verifyEmail(page: Page, email: string) {
   await page.goto(await emailLink(email, "email_verify"));
   await expect(page.getByTestId("verify-email-banner")).toHaveCount(0);
 }
+
+/** نموذج الطلب العام: عنوان وجهة ومدينة نصية (بلا قوائم منسدلة) */
+export async function fillGeneralRequest(
+  page: Page,
+  { title, authority, city }: { title: string; authority: string; city: string },
+) {
+  await page.getByLabel("عنوان الطلب").fill(title);
+  await page.getByLabel("الجهة المعنية").fill(authority);
+  await page.getByLabel("المدينة").fill(city);
+}

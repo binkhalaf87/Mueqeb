@@ -48,9 +48,11 @@ export default async function ProviderRequestsPage({
       bids_deadline: string | null;
       target_provider_id: string | null;
       service_name: string | null;
+      authority: string | null;
     }>(
       `select r.id, r.mode, r.city, r.urgency, r.description, r.available_docs, r.status,
-              r.bids_deadline, r.target_provider_id, t.name_ar as service_name
+              r.bids_deadline, r.target_provider_id, coalesce(t.name_ar, r.title) as service_name,
+              r.authority
        from public.service_requests r left join public.service_types t on t.id = r.service_type_id
        order by r.created_at desc`,
     ),
@@ -70,7 +72,7 @@ export default async function ProviderRequestsPage({
 
   return (
     <div className="space-y-6">
-      <PageTitle subtitle="طلبات عامة في خدماتك ومدنك، وطلبات عروض خاصة موجّهة إليك. بيانات العملاء تظهر بعد اختيار عرضك فقط.">
+      <PageTitle subtitle="الطلبات العامة المنشورة، والطلبات في خدماتك ومدنك، وطلبات العروض الخاصة الموجّهة إليك. بيانات العملاء تظهر بعد اختيار عرضك فقط.">
         الطلبات المتاحة
       </PageTitle>
 
@@ -124,7 +126,8 @@ export default async function ProviderRequestsPage({
                       </span>
                     </div>
                     <p className="text-sm text-muted">
-                      {MODE_LABEL[r.mode]} · {r.city}
+                      {MODE_LABEL[r.mode]}
+                      {r.authority && ` · ${r.authority}`} · {r.city}
                     </p>
                     {r.description && <p className="line-clamp-2 text-sm">{r.description}</p>}
                     {bid && (

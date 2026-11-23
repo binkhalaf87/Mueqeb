@@ -37,7 +37,7 @@ export async function startPayment(_prev: FormState, formData: FormData): Promis
     service_name: string | null;
   }>(
     `select o.id, o.total_paid_halalas, o.payment_status,
-            r.status as request_status, t.name_ar as service_name
+            r.status as request_status, coalesce(t.name_ar, r.title) as service_name
      from public.orders o
      join public.service_requests r on r.id = o.request_id
      left join public.service_types t on t.id = r.service_type_id

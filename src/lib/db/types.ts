@@ -336,7 +336,7 @@ export type Database = {
         Row: {
           id: string;
           requester_account_id: string;
-          service_type_id: string;
+          service_type_id: string | null;
           mode: Database["public"]["Enums"]["request_mode"];
           target_provider_id: string | null;
           city: string;
@@ -357,6 +357,8 @@ export type Database = {
           delivery_note: string | null;
           closed_at: string | null;
           is_late: boolean;
+          title: string | null;
+          authority: string | null;
         };
       };
       service_types: {
@@ -397,7 +399,7 @@ export type Database = {
       provider_document_type:
         "commercial_register" | "municipal_license" | "manager_id" | "iban_certificate";
       provider_verification_status: "pending" | "approved" | "rejected" | "suspended";
-      request_document_kind: "client_document" | "delivery_proof";
+      request_document_kind: "client_document" | "delivery_proof" | "request_attachment";
       request_mode: "direct_listed" | "direct_quote" | "public";
       request_status:
         | "draft"
@@ -455,6 +457,8 @@ export type Database = {
           p_available_docs?: string[];
           p_target_provider_id?: string;
           p_private_notes?: string;
+          p_title?: string;
+          p_authority?: string;
         };
         Returns: string;
       };
@@ -677,6 +681,7 @@ export type Database = {
         Returns: string;
       };
       remind_confirmation_deadlines: { Args: Record<string, never>; Returns: number };
+      request_attachment_count: { Args: { p_request_id: string }; Returns: number };
       request_bids: {
         Args: { p_request_id: string };
         Returns: {
@@ -698,6 +703,7 @@ export type Database = {
           dispute_pct: number;
         }[];
       };
+      request_label: { Args: { p_request_id: string }; Returns: string };
       requester_stats_for_request: {
         Args: { p_request_id: string };
         Returns: { avg_rating: number; reviews_count: number; completed_requests: number }[];

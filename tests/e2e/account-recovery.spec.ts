@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { emailLink, signUp, uniqueCr, uniqueEmail, uniquePhone, verifyEmail } from "./helpers";
+import {
+  emailLink,
+  signUp,
+  uniqueCr,
+  uniqueEmail,
+  uniquePhone,
+  verifyEmail,
+  fillGeneralRequest,
+} from "./helpers";
 
 const NEW_PASSWORD = "Recovered#2026x";
 
@@ -18,8 +26,11 @@ test("التسجيل بالبريد: لا نشر قبل تأكيد البريد�
 
   // الخادم يرفض النشر قبل التأكيد (لا يُعتمد على الواجهة)
   await page.goto("/dashboard/requester/requests/new");
-  await page.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
-  await page.getByLabel("المدينة").selectOption("الرياض");
+  await fillGeneralRequest(page, {
+    title: "إصدار أو تجديد رخص العمل",
+    authority: "قوى",
+    city: "الرياض",
+  });
   await page.getByLabel("وصف الطلب").fill("طلب قبل تأكيد البريد");
   await page.getByRole("button", { name: "انشر الطلب" }).click();
   await expect(page.getByText(/أكّد بريدك الإلكتروني أولاً/)).toBeVisible();

@@ -17,7 +17,8 @@ import { ProviderExecutionPanel } from "./execution-panel";
 import { WithdrawForm } from "./withdraw-form";
 import { ReviewsSection } from "@/components/reviews-section";
 import { Chat } from "@/components/chat";
-import { getThreadMessages } from "@/lib/execution/queries";
+import { getRequestDocuments, getThreadMessages } from "@/lib/execution/queries";
+import { RequestDocumentsList } from "@/components/request-documents";
 
 export const metadata: Metadata = { title: "تفاصيل طلب" };
 
@@ -42,13 +43,15 @@ export default async function ProviderRequestPage({
     available_docs: string[];
     status: Enums<"request_status">;
     bids_deadline: string | null;
+    title: string | null;
+    authority: string | null;
     service_types: Pick<
       Tables<"service_types">,
       "name_ar" | "min_fee_halalas" | "guide_min_halalas" | "guide_max_halalas"
     > | null;
   }>(
     `select r.id, r.mode, r.city, r.urgency, r.description, r.available_docs, r.status,
-            r.bids_deadline,
+            r.bids_deadline, r.title, r.authority,
             case when t.id is null then null else json_build_object(
               'name_ar', t.name_ar, 'min_fee_halalas', t.min_fee_halalas,
               'guide_min_halalas', t.guide_min_halalas, 'guide_max_halalas', t.guide_max_halalas
@@ -60,7 +63,7 @@ export default async function ProviderRequestPage({
   if (!request) notFound();
 
   // عرضي فقط (RLS)، والبيانات الخاصة تظهر فقط إذا رُسي الطلب عليّ (RLS)
-  const [myBid, details, order, { data: clientStatsRows }] = await Promise.all([
+  const [myBid, details, order, { data: clientStatsRows }, documents] = await Promise.all([
     db.maybeOne<Tables<"bids">>("select * from public.bids where request_id = $1", [id]),
     db.maybeOne<Tables<"request_private_details">>(
       "select * from public.request_private_details where request_id = $1",
@@ -84,7 +87,10 @@ export default async function ProviderRequestPage({
     ),
     // سجل العميل بلا هوية: متوسط تقييمه وعدد طلباته المكتملة
     db.rpc("requester_stats_for_request", { p_request_id: id }),
+    // المرفقات التوضيحية تظهر لكل مكتب يرى الطلب (RLS)، ومستندات التنفيذ للمكتب المختار فقط
+    getRequestDocuments(id),
   ]);
+  const attachments = documents.filter((d) => d.kind === "request_attachment");
   const clientStats = clientStatsRows?.[0] ?? null;
 
   const left = timeLeft(request.bids_deadline);
@@ -105,7 +111,8 @@ export default async function ProviderRequestPage({
       </Link>
       <PageTitle subtitle={`${MODE_LABEL[request.mode]} · ${request.city}`}>
         <span className="flex flex-wrap items-center gap-3">
-          {request.service_types?.name_ar} <RequestStatusBadge status={request.status} />
+          {request.service_types?.name_ar ?? request.title}{" "}
+          <RequestStatusBadge status={request.status} />
         </span>
       </PageTitle>
 
@@ -118,11 +125,25 @@ export default async function ProviderRequestPage({
             </span>
           )}
         </div>
+        {request.authority && (
+          <p data-testid="request-authority">
+            <span className="text-muted">الجهة المعنية: </span>
+            {request.authority}
+          </p>
+        )}
         {request.description && <p className="whitespace-pre-line">{request.description}</p>}
-        <p>
-          <span className="text-muted">المستندات المتوفرة لدى العميل: </span>
-          {request.available_docs.length ? request.available_docs.join("، ") : "لم يحدد"}
-        </p>
+        {request.service_types && (
+          <p>
+            <span className="text-muted">المستندات المتوفرة لدى العميل: </span>
+            {request.available_docs.length ? request.available_docs.join("، ") : "لم يحدد"}
+          </p>
+        )}
+        {attachments.length > 0 && (
+          <div className="space-y-1" data-testid="provider-request-attachments">
+            <p className="text-muted">مرفقات العميل التوضيحية:</p>
+            <RequestDocumentsList documents={attachments} emptyText="" />
+          </div>
+        )}
         {request.service_types && request.service_types.min_fee_halalas > 0 && (
           <p className="text-muted">
             الحد الأدنى للأتعاب: {formatHalalas(request.service_types.min_fee_halalas)}
@@ -228,7 +249,7 @@ export default async function ProviderRequestPage({
         </Card>
       )}
 
-      {canBid && request.service_types && (
+      {canBid && (
         <Card>
           <h2 className="mb-1 font-semibold">
             {myBid?.status === "submitted" ? "تعديل عرضك" : "قدّم عرضك"}
@@ -238,7 +259,7 @@ export default async function ProviderRequestPage({
           </p>
           <BidForm
             requestId={request.id}
-            minFee={request.service_types.min_fee_halalas}
+            minFee={request.service_types?.min_fee_halalas ?? 0}
             initial={
               myBid && myBid.status === "submitted"
                 ? {

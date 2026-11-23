@@ -1,3 +1,4 @@
+import { fillGeneralRequest } from "./helpers";
 import { expect, test } from "@playwright/test";
 import { accept, as, deliver, expectLedgerBalanced, paidRequest } from "./flows";
 
@@ -77,8 +78,11 @@ test("المحادثة قبل الترسية تحجب أرقام التواصل"
   const description = `طلب لاختبار المحادثة ${Math.random().toString(36).slice(2, 7).replace(/\d/g, "x")}`;
   const requester = await as(browser, "establishment@mueqeb.test");
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
-  await requester.getByLabel("المدينة").selectOption("الرياض");
+  await fillGeneralRequest(requester, {
+    title: "إصدار أو تجديد رخص العمل",
+    authority: "قوى",
+    city: "الرياض",
+  });
   await requester.getByLabel("وصف الطلب").fill(description);
   await requester.getByRole("button", { name: "انشر الطلب" }).click();
   await expect(requester.getByTestId("request-status")).toHaveText("مفتوح");

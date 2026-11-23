@@ -81,7 +81,7 @@ export default async function RequesterDashboard({
     ),
     // العروض المقدَّمة مقروءة لأعضاء حساب الطلب (RLS)
     db.query<Row>(
-      `select r.id, r.mode, r.city, r.status, r.created_at, t.name_ar as service_name,
+      `select r.id, r.mode, r.city, r.status, r.created_at, coalesce(t.name_ar, r.title) as service_name,
               (select count(*) from public.bids b
                where b.request_id = r.id and b.status = 'submitted') as open_bids
        from public.service_requests r left join public.service_types t on t.id = r.service_type_id

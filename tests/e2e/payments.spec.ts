@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { logIn } from "./helpers";
+import { logIn, fillGeneralRequest } from "./helpers";
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -101,8 +101,11 @@ test("الرسوم الحكومية من العرض تظهر منفصلة، وا
   const description = `تسجيل منشأة جديدة في التأمينات ${tag()}`;
   const requester = await as(browser, "establishment@mueqeb.test");
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
-  await requester.getByLabel("المدينة").selectOption("الرياض");
+  await fillGeneralRequest(requester, {
+    title: "إصدار أو تجديد رخص العمل",
+    authority: "قوى",
+    city: "الرياض",
+  });
   await requester.getByLabel("وصف الطلب").fill(description);
   await requester.getByRole("button", { name: "انشر الطلب" }).click();
   await expect(requester.getByTestId("request-status")).toHaveText("مفتوح");

@@ -29,9 +29,10 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
     is_late: boolean;
     delegation_platform: Enums<"delegation_platform"> | null;
     required_docs: string[] | null;
+    service_type_id: string | null;
   }>(
     `select r.status, r.delegation_confirmed_at, r.started_at, r.due_at, r.delivered_at,
-            r.delivery_note, r.is_late, t.delegation_platform, t.required_docs
+            r.delivery_note, r.is_late, t.delegation_platform, t.required_docs, r.service_type_id
      from public.service_requests r left join public.service_types t on t.id = r.service_type_id
      where r.id = $1`,
     [requestId],
@@ -46,7 +47,8 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
   }
 
   const platform = request.delegation_platform ?? "none";
-  const [guide, documents, dispute, confirmDays] = await Promise.all([
+  const generalRequest = !request.service_type_id;
+  const [storedGuide, documents, dispute, confirmDays] = await Promise.all([
     db.maybeOne<{ title: string; steps: string[] }>(
       "select title, steps from public.delegation_guides where platform = $1",
       [platform],
@@ -59,6 +61,18 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
       "select value from public.settings where key = 'delivery_confirmation_days'",
     ),
   ]);
+  // الطلب العام بلا خدمة محددة: طريقة التفويض يحددها المكتب حسب المعاملة
+  const guide = generalRequest
+    ? {
+        title: "التفويض والمستندات",
+        steps: [
+          "اتفق مع المكتب عبر المحادثة على الصلاحية أو التفويض الذي تحتاجه معاملتك.",
+          "امنح التفويض من حسابك في المنصة الرسمية المختصة فقط.",
+          "ارفع المستندات التي يطلبها المكتب في الأسفل.",
+          "اضغط «تم» عندما تنتهي ليبدأ المكتب.",
+        ],
+      }
+    : storedGuide;
   const clientDocs = documents.filter((d) => d.kind === "client_document");
   const proofs = documents.filter((d) => d.kind === "delivery_proof");
   const canUpload = request.status === "awaiting_client" || request.status === "in_progress";
@@ -86,7 +100,11 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
               fields={{ requestId }}
               className="rounded-lg bg-primary px-4 py-2 font-medium text-white hover:bg-primary-hover"
             >
-              {platform === "none" ? "تم، المستندات جاهزة" : "تم منح التفويض"}
+              {generalRequest
+                ? "تم، التفويض والمستندات جاهزة"
+                : platform === "none"
+                  ? "تم، المستندات جاهزة"
+                  : "تم منح التفويض"}
             </ActionButton>
           )}
         </Card>
@@ -103,6 +121,7 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
             <UploadRequestDocument
               requestId={requestId}
               labels={request.required_docs ?? []}
+              defaultLabel="مستند"
               testId="upload-client-document"
             />
           )}

@@ -20,6 +20,10 @@ import { RequesterExecutionPanel } from "./execution-panel";
 import { Rating } from "@/components/rating";
 import { ReviewsSection } from "@/components/reviews-section";
 import { RequesterChats } from "./requester-chats";
+import { getRequestDocuments } from "@/lib/execution/queries";
+import { RequestDocumentsList } from "@/components/request-documents";
+import { UploadRequestDocument } from "@/components/upload-request-document";
+import { MAX_REQUEST_ATTACHMENTS } from "@/lib/requests/validation";
 
 export const metadata: Metadata = { title: "تفاصيل الطلب" };
 
@@ -31,7 +35,7 @@ export default async function RequesterRequestPage({
 }: PageProps<"/dashboard/requester/requests/[id]">) {
   await requireRole("requester");
   const { id } = await params;
-  const { created } = await searchParams;
+  const { created, attachmentsFailed } = await searchParams;
   if (!UUID.test(id)) notFound();
   const db = await getDb();
 
@@ -58,7 +62,7 @@ export default async function RequesterRequestPage({
   );
   if (!request) notFound();
 
-  const [{ data: bids }, order, events] = await Promise.all([
+  const [{ data: bids }, order, events, documents] = await Promise.all([
     db.rpc("request_bids", { p_request_id: id }),
     db.maybeOne<
       Pick<
@@ -93,7 +97,9 @@ export default async function RequesterRequestPage({
        from public.order_events where request_id = $1 order by created_at`,
       [id],
     ),
+    getRequestDocuments(id),
   ]);
+  const attachments = documents.filter((d) => d.kind === "request_attachment");
 
   const open = request.status === "open";
   const remaining = timeLeft(request.bids_deadline);
@@ -123,7 +129,8 @@ export default async function RequesterRequestPage({
       </Link>
       <PageTitle subtitle={`${MODE_LABEL[request.mode]} · ${request.city}`}>
         <span className="flex flex-wrap items-center gap-3">
-          {request.service_types?.name_ar} <RequestStatusBadge status={request.status} />
+          {request.service_types?.name_ar ?? request.title}{" "}
+          <RequestStatusBadge status={request.status} />
         </span>
       </PageTitle>
       {created === "1" && (
@@ -133,6 +140,11 @@ export default async function RequesterRequestPage({
           data-testid="request-created"
         >
           تم إرسال طلبك. يمكنك متابعة حالته من صفحة الطلب.
+        </p>
+      )}
+      {attachmentsFailed && (
+        <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          تعذّر رفع بعض المرفقات. يمكنك إضافتها من «تفاصيل الطلب» ما دام الطلب مفتوحاً.
         </p>
       )}
 
@@ -299,6 +311,12 @@ export default async function RequesterRequestPage({
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="space-y-2 text-sm">
           <h2 className="font-semibold">تفاصيل الطلب</h2>
+          {request.authority && (
+            <p data-testid="request-authority">
+              <span className="text-muted">الجهة المعنية: </span>
+              {request.authority}
+            </p>
+          )}
           <p>
             <span className="text-muted">الاستعجال: </span>
             {URGENCY_LABEL[request.urgency]}
@@ -309,6 +327,24 @@ export default async function RequesterRequestPage({
               <span className="text-muted">المستندات المتوفرة: </span>
               {request.available_docs.join("، ")}
             </p>
+          )}
+          {(attachments.length > 0 || (open && request.mode === "public")) && (
+            <div className="space-y-2" data-testid="request-attachments-list">
+              <p className="text-muted">مرفقات توضيحية (تراها المكاتب قبل اختيار العرض):</p>
+              <RequestDocumentsList documents={attachments} emptyText="لا توجد مرفقات." />
+              {open &&
+                request.mode === "public" &&
+                attachments.length < MAX_REQUEST_ATTACHMENTS && (
+                  <UploadRequestDocument
+                    requestId={request.id}
+                    labels={[]}
+                    kind="request_attachment"
+                    defaultLabel="مرفق توضيحي"
+                    hint="أضف ما يوضح طلبك. أخفِ أرقام الهوية والأسماء وأرقام التواصل."
+                    testId="upload-request-attachment"
+                  />
+                )}
+            </div>
           )}
           {details?.private_notes && (
             <p>

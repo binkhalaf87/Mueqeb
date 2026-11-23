@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { logIn } from "./helpers";
+import { logIn, fillGeneralRequest } from "./helpers";
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -37,11 +37,11 @@ test("معيار القبول: طلب عام من منشأة، 3 عروض مغل
   // 1) المنشأة تنشر طلباً عاماً
   const requester = await as(browser, "establishment@mueqeb.test");
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
-  await expect(requester.getByTestId("service-info")).toContainText("تُحدد أتعاب المكتب في العرض");
-  await expect(requester.getByTestId("service-info")).not.toContainText("300 ر.س");
-  await requester.getByLabel("صورة إقامة العامل").check();
-  await requester.getByLabel("المدينة").selectOption("الرياض");
+  await fillGeneralRequest(requester, {
+    title: "إصدار أو تجديد رخص العمل",
+    authority: "قوى",
+    city: "الرياض",
+  });
   await requester.getByLabel("مستعجل").check();
   await requester.getByLabel("وصف الطلب").fill(description);
   await requester
@@ -160,8 +160,11 @@ test("طلب عرض خاص يصل للمكتب المستهدف وحده", async
 test("وصف يحوي رقم جوال يُرفض مع إبقاء القيم", async ({ page }) => {
   await logIn(page, "establishment@mueqeb.test");
   await page.goto("/dashboard/requester/requests/new");
-  await page.getByLabel("الخدمة").selectOption({ label: "تسجيل منشأة في التأمينات الاجتماعية" });
-  await page.getByLabel("المدينة").selectOption("الدمام");
+  await fillGeneralRequest(page, {
+    title: "تسجيل منشأة في التأمينات الاجتماعية",
+    authority: "التأمينات الاجتماعية",
+    city: "الدمام",
+  });
   await page.getByLabel("وصف الطلب").fill("أرجو التواصل على 0551234567 لتسجيل المنشأة");
   await page.getByRole("button", { name: "انشر الطلب" }).click();
   await expect(page.getByText(/لا تكتب أرقام جوال/)).toBeVisible();
@@ -173,4 +176,57 @@ test("مزوّد غير معتمد لا يرى الطلبات", async ({ page })
   await logIn(page, "0500000002");
   await page.goto("/dashboard/provider/requests");
   await expect(page.getByText("تظهر الطلبات بعد اعتماد الإدارة لمكتبك.")).toBeVisible();
+});
+
+test("الطلب العام نص حر بلا قوائم، ومرفقاته تظهر لكل مكتب قبل اختيار العرض", async ({
+  browser,
+}) => {
+  const title = `نقل كفالة عامل من منشأة أخرى ${tag()}`;
+  const requester = await as(browser, "establishment@mueqeb.test");
+  await requester.goto("/dashboard/requester/requests/new");
+  // لا قائمة منسدلة في نموذج الطلب العام
+  await expect(requester.locator("main form select")).toHaveCount(0);
+  await fillGeneralRequest(requester, { title, authority: "قوى", city: "رفحاء" });
+  await requester.getByLabel("وصف الطلب").fill("العامل لدى منشأة أخرى ونرغب في نقل خدماته");
+  await requester.getByLabel(/مرفقات توضيحية/).setInputFiles([
+    {
+      name: "qiwa-screen.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n% qiwa\n%%EOF"),
+    },
+  ]);
+  await requester.getByRole("button", { name: "انشر الطلب" }).click();
+  await expect(requester).toHaveURL(/\?created=1$/);
+  await expect(requester.locator("h1")).toContainText(title);
+  await expect(requester.getByTestId("request-authority")).toContainText("قوى");
+  await expect(requester.getByTestId("request-attachments-list")).toContainText("qiwa-screen.pdf");
+
+  // مكتب لا يغطي المدينة ولم يقدّم عرضاً بعد يرى الطلب ومرفقه، دون هوية العميل
+  const provider = await as(browser, "provider3@mueqeb.test");
+  await provider.goto("/dashboard/provider/requests");
+  await provider.getByRole("link", { name: new RegExp(title) }).click();
+  await expect(provider.getByTestId("request-authority")).toContainText("قوى");
+  const attachment = provider.getByTestId("provider-request-attachments").getByRole("link");
+  await expect(attachment).toHaveText("qiwa-screen.pdf");
+  const file = await provider.request.get((await attachment.getAttribute("href"))!);
+  expect(file.status()).toBe(200);
+  await expect(provider.getByTestId("client-details")).toHaveCount(0);
+  await expect(provider.locator("main")).not.toContainText("مؤسسة البناء الحديث");
+
+  // ويستطيع تقديم عرض بلا حد أدنى مرتبط بخدمة
+  await providerBids(provider, title, "150");
+});
+
+test("رقم جوال في عنوان الطلب يُرفض", async ({ page }) => {
+  await logIn(page, "establishment@mueqeb.test");
+  await page.goto("/dashboard/requester/requests/new");
+  await fillGeneralRequest(page, {
+    title: "اتصلوا على 0551234567 لنقل الكفالة",
+    authority: "قوى",
+    city: "الرياض",
+  });
+  await page.getByLabel("وصف الطلب").fill("نقل خدمات عامل من منشأة أخرى");
+  await page.getByRole("button", { name: "انشر الطلب" }).click();
+  await expect(page.getByText(/لا تكتب أرقام جوال/)).toBeVisible();
+  await expect(page).toHaveURL(/\/requests\/new$/);
 });

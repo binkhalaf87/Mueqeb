@@ -48,7 +48,7 @@ export async function ProviderOrdersPanel({ providerId }: { providerId: string }
   const db = await getDb();
   const [orders, bids, earnings] = await Promise.all([
     db.query<Order>(
-      `select o.request_id, r.status, r.city, t.name_ar as service_name, r.due_at, r.is_late,
+      `select o.request_id, r.status, r.city, coalesce(t.name_ar, r.title) as service_name, r.due_at, r.is_late,
               r.delegation_confirmed_at, t.delegation_platform, o.provider_net_halalas
        from public.orders o
        join public.service_requests r on r.id = o.request_id

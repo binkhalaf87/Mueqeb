@@ -46,7 +46,7 @@ export default async function DisputePage({ params }: PageProps<"/admin/disputes
       }
     >(
       `select r.status, r.city, r.description, r.delivered_at, r.delivery_note, r.is_late, r.due_at,
-              case when t.id is null then null else json_build_object('name_ar', t.name_ar) end
+              json_build_object('name_ar', coalesce(t.name_ar, r.title))
                 as service_types,
               case when d.request_id is null then null else json_build_object(
                 'contact_name', d.contact_name, 'establishment_name', d.establishment_name)

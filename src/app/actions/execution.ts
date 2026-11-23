@@ -1,14 +1,11 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, requireRole } from "@/lib/auth/session";
 import { getDb, serviceDb } from "@/lib/db/server";
 import { attempt } from "@/lib/db/core";
-import { removeObjects, uploadObject } from "@/lib/storage";
-import { REQUEST_DOCUMENTS_BUCKET } from "@/lib/execution/queries";
-import { ALLOWED_DOCUMENT_MIME } from "@/lib/providers/constants";
+import { saveRequestDocument } from "@/lib/execution/documents";
 import { validateDocumentFile } from "@/lib/providers/validation";
 import { CREDENTIALS_MESSAGE, mentionsCredentials } from "@/lib/contact-info";
 import { parseSarToHalalas } from "@/lib/money";
@@ -195,44 +192,31 @@ export async function uploadRequestDocument(
   }
   const requestId = requestIdOf(formData);
   if (!requestId) return { message: "طلب غير صالح." };
-  const kind = user.role === "provider" ? "delivery_proof" : "client_document";
+  // العميل والطلب مفتوح: مرفق توضيحي يراه المكتب قبل اختيار العرض؛ بعد الدفع: مستند تنفيذ
+  const kind =
+    user.role === "provider"
+      ? "delivery_proof"
+      : formData.get("kind") === "request_attachment"
+        ? "request_attachment"
+        : "client_document";
   const label =
     String(formData.get("label") ?? "")
       .trim()
-      .slice(0, 120) || "مستند";
+      .slice(0, 120) || (kind === "request_attachment" ? "مرفق توضيحي" : "مستند");
   const file = formData.get("file");
   const fileError = validateDocumentFile(file);
   if (fileError) return { errors: { file: fileError } };
-  const doc = file as File;
 
-  const ext = ALLOWED_DOCUMENT_MIME[doc.type as keyof typeof ALLOWED_DOCUMENT_MIME];
-  const path = `${requestId}/${kind}/${randomUUID()}.${ext}`;
   const db = await getDb();
-  // RLS في storage.objects والجدول يتحقق من الدور وحالة الطلب
-  const { error: uploadError } = await uploadObject(db, REQUEST_DOCUMENTS_BUCKET, path, doc);
-  if (uploadError) return { message: "لا يمكن رفع ملفات في حالة الطلب الحالية." };
-
-  const { error } = await attempt(
-    db.query(
-      `insert into public.request_documents
-         (request_id, kind, label, storage_path, file_name, mime_type, size_bytes, uploaded_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        requestId,
-        kind,
-        label,
-        path,
-        doc.name.slice(0, 200) || `document.${ext}`,
-        doc.type,
-        doc.size,
-        user.id,
-      ],
-    ),
-  );
-  if (error) {
-    await removeObjects(db, REQUEST_DOCUMENTS_BUCKET, [path]);
-    return { message: "تعذّر حفظ المستند." };
-  }
+  const failure = await saveRequestDocument(db, {
+    requestId,
+    kind,
+    label,
+    file: file as File,
+    userId: user.id,
+  });
+  if (failure === "upload_failed") return { message: "لا يمكن رفع ملفات في حالة الطلب الحالية." };
+  if (failure) return { message: "تعذّر حفظ المستند." };
   revalidateAll();
   return { message: "رُفع المستند." };
 }

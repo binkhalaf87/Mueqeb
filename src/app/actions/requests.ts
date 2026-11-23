@@ -8,7 +8,13 @@ import { refundPayment } from "@/lib/payments/process";
 import { cancelInProgress } from "@/lib/execution/cancel";
 import { fieldErrors } from "@/lib/auth/validation";
 import { rpcErrorMessage } from "@/lib/requests/constants";
-import { createRequestSchema } from "@/lib/requests/validation";
+import {
+  MAX_ATTACHMENTS_TOTAL_BYTES,
+  MAX_REQUEST_ATTACHMENTS,
+  createRequestSchema,
+} from "@/lib/requests/validation";
+import { validateDocumentFile } from "@/lib/providers/validation";
+import { saveRequestDocument } from "@/lib/execution/documents";
 import { INVALID_INPUT_MESSAGE, uuidField } from "@/lib/validation";
 import { RATE_LIMIT_MESSAGE, takeRateLimit } from "@/lib/auth/rate-limit";
 import type { FormState } from "./auth";
@@ -25,8 +31,10 @@ export async function createRequest(_prev: FormState, formData: FormData): Promi
   const parsed = createRequestSchema.safeParse({
     mode: formData.get("mode"),
     accountId: formData.get("accountId"),
-    serviceTypeId: formData.get("serviceTypeId"),
+    serviceTypeId: formData.get("serviceTypeId") ?? undefined,
     providerId: formData.get("providerId") || undefined,
+    title: formData.get("title") ?? undefined,
+    authority: formData.get("authority") ?? undefined,
     city: formData.get("city") ?? "",
     urgency: formData.get("urgency") ?? "normal",
     description: formData.get("description") ?? "",
@@ -35,12 +43,31 @@ export async function createRequest(_prev: FormState, formData: FormData): Promi
   });
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
+  // المرفقات التوضيحية (الطلب العام فقط): تُفحص قبل إنشاء الطلب
+  const attachments =
+    parsed.data.mode === "public"
+      ? formData.getAll("attachments").filter((f): f is File => f instanceof File && f.size > 0)
+      : [];
+  if (attachments.length > MAX_REQUEST_ATTACHMENTS) {
+    return { errors: { attachments: `خمسة مرفقات كحد أقصى.` } };
+  }
+  if (attachments.reduce((sum, f) => sum + f.size, 0) > MAX_ATTACHMENTS_TOTAL_BYTES) {
+    return { errors: { attachments: "حجم المرفقات معاً يتجاوز 10MB." } };
+  }
+  for (const file of attachments) {
+    const fileError = validateDocumentFile(file);
+    if (fileError) return { errors: { attachments: `${file.name}: ${fileError}` } };
+  }
+
   const input = parsed.data;
   if (!takeRateLimit("request", user.id)) return { message: RATE_LIMIT_MESSAGE };
   const db = await getDb();
   const { data: requestId, error } = await db.rpc("create_service_request", {
     p_requester_account_id: input.accountId,
-    p_service_type_id: input.serviceTypeId,
+    // الطلب العام بلا خدمة محددة: null صريح (المعامل بلا قيمة افتراضية في الدالة)
+    p_service_type_id: (input.mode === "public" ? null : input.serviceTypeId) as string,
+    p_title: input.mode === "public" ? input.title : undefined,
+    p_authority: input.mode === "public" ? input.authority : undefined,
     p_mode: input.mode,
     p_target_provider_id: input.mode === "public" ? undefined : input.providerId,
     p_city: input.city,
@@ -55,8 +82,25 @@ export async function createRequest(_prev: FormState, formData: FormData): Promi
     };
   }
 
+  let failed = 0;
+  for (const file of attachments) {
+    const failure = await saveRequestDocument(db, {
+      requestId,
+      kind: "request_attachment",
+      label: "مرفق توضيحي",
+      file,
+      userId: user.id,
+    });
+    if (failure) {
+      failed += 1;
+      logError(`request attachment upload failed (${requestId})`, new Error(failure));
+    }
+  }
+
   revalidateRequestPages();
-  redirect(`/dashboard/requester/requests/${requestId}?created=1`);
+  redirect(
+    `/dashboard/requester/requests/${requestId}?created=1${failed ? `&attachmentsFailed=${failed}` : ""}`,
+  );
 }
 
 export async function acceptBid(_prev: FormState, formData: FormData): Promise<FormState> {

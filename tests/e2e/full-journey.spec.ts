@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { accept, as, expectLedgerBalanced } from "./flows";
-import { signUp, uniqueCr, uniqueEmail, verifyEmail } from "./helpers";
+import { signUp, uniqueCr, uniqueEmail, verifyEmail, fillGeneralRequest } from "./helpers";
 
 /**
  * معيار قبول المرحلة 8: المسار الكامل آلياً —
@@ -54,9 +54,11 @@ test("المسار الكامل: من تسجيل المنشأة حتى صرف م
 
   // 2) طلب عام
   await requester.goto("/dashboard/requester/requests/new");
-  await requester.getByLabel("الخدمة").selectOption({ label: "إصدار أو تجديد رخص العمل" });
-  await requester.getByLabel("صورة إقامة العامل").check();
-  await requester.getByLabel("المدينة").selectOption("الرياض");
+  await fillGeneralRequest(requester, {
+    title: "إصدار أو تجديد رخص العمل",
+    authority: "قوى",
+    city: "الرياض",
+  });
   await requester.getByLabel("وصف الطلب").fill(description);
   await requester.getByRole("button", { name: "انشر الطلب" }).click();
   await expect(requester).toHaveURL(/\/dashboard\/requester\/requests\/[0-9a-f-]{36}\?created=1$/);
@@ -93,7 +95,9 @@ test("المسار الكامل: من تسجيل المنشأة حتى صرف م
   await expect(requester.locator('input[type="password"]')).toHaveCount(0);
   await upload(requester, "upload-client-document", "iqama");
   await expect(requester.getByTestId("client-documents")).toContainText("iqama.pdf");
-  await requester.getByRole("button", { name: "تم منح التفويض" }).click();
+  // الطلب العام بلا خدمة محددة: يتفق العميل مع المكتب على التفويض ثم يؤكد
+  await expect(requester.getByTestId("delegation-guide")).toContainText("التفويض والمستندات");
+  await requester.getByRole("button", { name: "تم، التفويض والمستندات جاهزة" }).click();
   await expect(requester.getByTestId("delegation-guide")).toContainText("تم منح التفويض");
 
   // 7) المكتب ينفّذ ويسلّم بإثبات

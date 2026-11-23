@@ -30,7 +30,7 @@ export default async function PayPage({
   const order = await db.maybeOne<
     Tables<"orders"> & { request_status: string; service_name: string | null }
   >(
-    `select o.*, r.status as request_status, t.name_ar as service_name
+    `select o.*, r.status as request_status, coalesce(t.name_ar, r.title) as service_name
      from public.orders o
      join public.service_requests r on r.id = o.request_id
      left join public.service_types t on t.id = r.service_type_id

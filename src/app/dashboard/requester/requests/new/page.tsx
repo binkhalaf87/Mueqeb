@@ -74,10 +74,13 @@ export default async function NewRequestPage({
         : `اطلب عرضاً خاصاً من ${provider!.officeName}`;
   const subtitle =
     mode === "public"
-      ? "يظهر طلبك للمكاتب التي تقدّم الخدمة في مدينتك، ويرسل كل مكتب يرغب في تنفيذه سعره ومدته دون أن يرى أسعار غيره، فتقارن العروض المتاحة وتختار."
+      ? "صف ما تحتاجه بكلماتك. يظهر طلبك لمكاتب التعقيب المعتمدة، ويرسل كل مكتب يرغب في تنفيذه سعره ومدته دون أن يرى أسعار غيره، فتقارن العروض المتاحة وتختار."
       : mode === "direct_listed"
         ? "يُرسل الطلب للمكتب مباشرة بسعره المعلن، ثم تنتقل للدفع."
         : "يصلك عرض سعر من هذا المكتب وحده، ثم تقرر.";
+
+  // رابط «اطلب عرض سعر» من صفحة خدمة: يقترح العنوان والجهة فقط، والطلب يبقى عاماً
+  const suggested = mode === "public" ? options.find((o) => o.id === serviceId) : undefined;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -85,7 +88,9 @@ export default async function NewRequestPage({
       <RequestForm
         mode={mode}
         options={options}
-        initialServiceId={mode === "public" ? (UUID.test(serviceId) ? serviceId : "") : serviceId}
+        initialServiceId={mode === "public" ? "" : serviceId}
+        initialTitle={suggested?.name}
+        initialAuthority={suggested?.category}
         provider={provider}
         accounts={accounts.map((a) => ({
           id: a.account_id,

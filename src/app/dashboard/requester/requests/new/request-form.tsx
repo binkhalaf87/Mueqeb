@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { createRequest } from "@/app/actions/requests";
 import type { FormState } from "@/app/actions/auth";
 import { SAUDI_CITIES } from "@/lib/cities";
@@ -8,7 +8,7 @@ import { formatHalalas } from "@/lib/money";
 import { DELEGATION_LABEL, type DelegationPlatform } from "@/lib/providers/constants";
 import type { RequestMode } from "@/lib/requests/constants";
 import { keepValuesSubmit } from "@/components/keep-values-submit";
-import { Button, Card, FormMessage, Select, TextArea } from "@/components/ui";
+import { Button, Card, Field, FormMessage, Select, TextArea } from "@/components/ui";
 
 export type ServiceOption = {
   id: string;
@@ -30,20 +30,23 @@ export function RequestForm({
   mode,
   options,
   initialServiceId,
+  initialTitle = "",
+  initialAuthority = "",
   provider,
   accounts,
 }: {
   mode: RequestMode;
   options: ServiceOption[];
   initialServiceId: string;
+  /** الطلب العام: عنوان وجهة مقترحان من صفحة خدمة (قابلان للتعديل) */
+  initialTitle?: string;
+  initialAuthority?: string;
   provider?: ProviderTarget;
   accounts: { id: string; label: string }[];
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(createRequest, {});
-  const [serviceId, setServiceId] = useState(initialServiceId);
-  const service = options.find((o) => o.id === serviceId);
-  const categories = [...new Set(options.map((o) => o.category))];
-  const cities = provider ? provider.cities : SAUDI_CITIES;
+  const service = options.find((o) => o.id === initialServiceId);
+  const isPublic = mode === "public";
 
   return (
     <form onSubmit={keepValuesSubmit(action)} className="space-y-6" noValidate>
@@ -53,41 +56,45 @@ export function RequestForm({
 
       <Card className="space-y-4">
         {accounts.length > 1 ? (
-          <Select label="الحساب" name="accountId" defaultValue={accounts[0]?.id}>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label}
-              </option>
-            ))}
-          </Select>
+          <fieldset>
+            <legend className="mb-1 block text-sm font-medium">الحساب</legend>
+            <div className="flex flex-wrap gap-4 pt-1 text-sm">
+              {accounts.map((a, i) => (
+                <label key={a.id} className="flex items-center gap-2">
+                  <input type="radio" name="accountId" value={a.id} defaultChecked={i === 0} />
+                  {a.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         ) : (
           <input type="hidden" name="accountId" value={accounts[0]?.id ?? ""} />
         )}
 
-        {mode === "public" ? (
-          <Select
-            label="الخدمة"
-            name="serviceTypeId"
-            value={serviceId}
-            onChange={(e) => setServiceId(e.target.value)}
-            error={state.errors?.serviceTypeId}
-          >
-            <option value="">اختر الخدمة…</option>
-            {categories.map((category) => (
-              <optgroup key={category} label={category}>
-                {options
-                  .filter((o) => o.category === category)
-                  .map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </Select>
+        {isPublic ? (
+          <>
+            <Field
+              label="عنوان الطلب"
+              name="title"
+              defaultValue={initialTitle}
+              maxLength={120}
+              placeholder="مثال: نقل كفالة عامل من منشأة أخرى"
+              hint="اكتب المعاملة التي تحتاجها بكلماتك."
+              error={state.errors?.title}
+            />
+            <Field
+              label="الجهة المعنية"
+              name="authority"
+              defaultValue={initialAuthority}
+              maxLength={80}
+              placeholder="مثال: قوى، التأمينات الاجتماعية، بلدي، وزارة التجارة"
+              hint="إن لم تكن متأكداً فاكتب «غير متأكد»."
+              error={state.errors?.authority}
+            />
+          </>
         ) : (
           <>
-            <input type="hidden" name="serviceTypeId" value={serviceId} />
+            <input type="hidden" name="serviceTypeId" value={initialServiceId} />
             <p>
               <span className="text-muted">الخدمة: </span>
               <strong>{service?.name}</strong>
@@ -95,33 +102,27 @@ export function RequestForm({
           </>
         )}
 
-        {service && (
-          <div
-            className="space-y-2 rounded-lg bg-background p-4 text-sm"
-            data-testid="service-info"
-          >
-            {mode === "direct_listed" && provider ? (
-              <p>
-                السعر المعلن: <strong>{formatHalalas(provider.feeHalalas)}</strong> · المدة
-                المتوقعة: {provider.durationDays} يوم
-              </p>
-            ) : (
-              <p>تُحدد أتعاب المكتب في العرض الذي يرسله لك، مع المدة وما يشمله العمل.</p>
-            )}
-            <p className="text-muted">
-              الرسوم الحكومية لا تُدفع عبر المنصة؛ تدفعها مباشرة عبر القناة الرسمية.
+        <div className="space-y-2 rounded-lg bg-background p-4 text-sm" data-testid="service-info">
+          {mode === "direct_listed" && provider ? (
+            <p>
+              السعر المعلن: <strong>{formatHalalas(provider.feeHalalas)}</strong> · المدة المتوقعة:{" "}
+              {provider.durationDays} يوم
             </p>
-            {service.delegation !== "none" && (
-              <p className="text-muted">
-                تعتمد طريقة التفويض أو منح الصلاحية على الخدمة والمنصة المختصة (
-                {DELEGATION_LABEL[service.delegation]})، ويوضحها المكتب بعد اختيار عرضه. استخدم
-                القنوات الرسمية فقط، ولا تشارك كلمة المرور أو رمز التحقق لحساباتك الحكومية.
-              </p>
-            )}
-          </div>
-        )}
+          ) : (
+            <p>تُحدد أتعاب المكتب في العرض الذي يرسله لك، مع المدة وما يشمله العمل.</p>
+          )}
+          <p className="text-muted">
+            الرسوم الحكومية لا تُدفع عبر المنصة؛ تدفعها مباشرة عبر القناة الرسمية.
+          </p>
+          <p className="text-muted">
+            {service && service.delegation !== "none"
+              ? `تعتمد طريقة التفويض أو منح الصلاحية على الخدمة والمنصة المختصة (${DELEGATION_LABEL[service.delegation]})، ويوضحها المكتب بعد اختيار عرضه.`
+              : "يوضح المكتب طريقة التفويض أو منح الصلاحية بعد اختيار عرضه."}{" "}
+            استخدم القنوات الرسمية فقط، ولا تشارك كلمة المرور أو رمز التحقق لحساباتك الحكومية.
+          </p>
+        </div>
 
-        {service && service.requiredDocs.length > 0 && (
+        {!isPublic && service && service.requiredDocs.length > 0 && (
           <fieldset>
             <legend className="mb-2 text-sm font-medium">المستندات المتوفرة لديك</legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -142,19 +143,38 @@ export function RequestForm({
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Select
-            label="المدينة"
-            name="city"
-            defaultValue={provider?.cities.length === 1 ? provider.cities[0] : ""}
-            error={state.errors?.city}
-          >
-            <option value="">اختر المدينة…</option>
-            {cities.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
+          {isPublic ? (
+            <>
+              <Field
+                label="المدينة"
+                name="city"
+                list="cities"
+                maxLength={40}
+                autoComplete="off"
+                placeholder="مثال: الرياض"
+                error={state.errors?.city}
+              />
+              <datalist id="cities">
+                {SAUDI_CITIES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </>
+          ) : (
+            <Select
+              label="المدينة"
+              name="city"
+              defaultValue={provider?.cities.length === 1 ? provider.cities[0] : ""}
+              error={state.errors?.city}
+            >
+              <option value="">اختر المدينة…</option>
+              {(provider?.cities ?? SAUDI_CITIES).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          )}
           <fieldset>
             <legend className="mb-1 block text-sm font-medium">الاستعجال</legend>
             <div className="flex gap-4 pt-2 text-sm">
@@ -171,13 +191,40 @@ export function RequestForm({
         </div>
 
         <TextArea
-          label={mode === "public" ? "وصف الطلب" : "وصف الطلب (اختياري)"}
+          label={isPublic ? "وصف الطلب" : "وصف الطلب (اختياري)"}
           name="description"
           rows={4}
           maxLength={1000}
           hint="تراه المكاتب قبل اختيار العرض. لا تكتب اسمك أو أرقام تواصل أو روابط."
           error={state.errors?.description}
         />
+        {isPublic && (
+          <div className="space-y-1" data-testid="request-attachments">
+            <label htmlFor="attachments" className="block text-sm font-medium">
+              مرفقات توضيحية (اختياري، وننصح بها)
+            </label>
+            <p className="text-xs text-muted">
+              صورة من رسالة المنصة الرسمية أو الخطاب أو النموذج تساعد المكاتب على فهم طلبك وتسعيره
+              بدقة. حتى 5 ملفات (PDF أو JPG أو PNG)، والحجم معاً لا يتجاوز 10MB.
+            </p>
+            <input
+              id="attachments"
+              type="file"
+              name="attachments"
+              multiple
+              accept="application/pdf,image/jpeg,image/png"
+              aria-invalid={state.errors?.attachments ? true : undefined}
+              className="w-full text-sm file:me-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-1.5"
+            />
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+              تراها المكاتب قبل اختيار العرض. أخفِ أرقام الهوية والإقامة والأسماء وأرقام التواصل،
+              ولا ترفق كلمات مرور أو رموز تحقق.
+            </p>
+            {state.errors?.attachments && (
+              <p className="text-sm text-danger">{state.errors.attachments}</p>
+            )}
+          </div>
+        )}
         <TextArea
           label="ملاحظات خاصة (اختياري)"
           name="privateNotes"

@@ -104,7 +104,11 @@ test("مزوّد غير معتمد مخفي، ويظهر بعد الاعتماد
 
   await visitor.goto(`/providers/${providerId}`);
   await expect(visitor.getByRole("heading", { name: officeName })).toBeVisible();
-  await expect(visitor.getByTestId("provider-license")).toContainText("تم التحقق من بيانات المكتب");
+  await expect(
+    visitor.locator("main").getByText("تم التحقق من بيانات المكتب").first(),
+  ).toBeVisible();
+  // الشارة فقط، بلا ملاحظة تفصيلية عن المستندات
+  await expect(visitor.locator("main")).not.toContainText("يقتصر التحقق");
   await expect(visitor.getByTestId("provider-services")).toContainText("إصدار أو تجديد رخص العمل");
   await expect(visitor.getByTestId("provider-services")).toContainText("175.50 ر.س");
   await expect(visitor.getByTestId("provider-services")).toContainText("3 يوم");

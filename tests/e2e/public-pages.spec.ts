@@ -122,7 +122,9 @@ test("صفحة المكتب تبرز الترخيص والتقييم", async ({ 
     .getByRole("link", { name: /مكتب الإنجاز للخدمات العامة/ })
     .first()
     .click();
-  await expect(page.getByTestId("provider-license")).toContainText("تم التحقق من بيانات المكتب");
+  await expect(page.locator("main").getByText("تم التحقق من بيانات المكتب").first()).toBeVisible();
+  // الشارة فقط، بلا ملاحظة تفصيلية عن المستندات
+  await expect(page.locator("main")).not.toContainText("يقتصر التحقق");
 });
 
 test("سياسة الاسترداد مخفية: لا رابط لها ولا تُفتح", async ({ page, request }) => {

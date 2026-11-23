@@ -8,7 +8,7 @@ import { formatHalalas } from "@/lib/money";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { getProviderStats } from "@/lib/providers/stats";
 import { Rating } from "@/components/rating";
-import { VerificationDetails, VerifiedBadge } from "@/components/verified-badge";
+import { VerifiedBadge } from "@/components/verified-badge";
 import { Card } from "@/components/ui";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -56,7 +56,6 @@ export default async function PublicProviderPage({ params }: PageProps<"/provide
           <VerifiedBadge />
           <Rating value={stats?.avg_rating} count={stats?.reviews_count} />
         </div>
-        <VerificationDetails verifiedAt={provider.approved_since} />
         <p className="text-muted">يخدم: {provider.cities.join("، ")}</p>
         {provider.bio && <p className="max-w-3xl whitespace-pre-line">{provider.bio}</p>}
       </section>

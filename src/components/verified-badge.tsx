@@ -1,9 +1,7 @@
 /**
  * التحقق من المكتب: الإدارة تراجع مستنداته يدوياً قبل ظهوره للعملاء.
- * الصياغة تصف ما جرى التحقق منه فقط، ولا تعني اعتماداً حكومياً أو ضماناً لجودة العمل.
+ * الصياغة لا تعني اعتماداً حكومياً أو ضماناً لجودة العمل.
  */
-export const VERIFIED_DOCUMENTS =
-  "السجل التجاري، والرخصة البلدية، وهوية المسؤول، وشهادة الحساب البنكي";
 
 export function VerifiedBadge() {
   return (
@@ -17,31 +15,5 @@ export function VerifiedBadge() {
       </svg>
       تم التحقق من بيانات المكتب
     </span>
-  );
-}
-
-/** تفصيل التحقق في ملف المكتب: ما الذي رُوجع، ومتى، وحدود هذا التحقق */
-export function VerificationDetails({ verifiedAt }: { verifiedAt: string | null }) {
-  const date = verifiedAt
-    ? new Date(verifiedAt).toLocaleDateString("ar-SA-u-ca-gregory", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : null;
-  return (
-    <div
-      className="max-w-3xl space-y-1 rounded-lg bg-primary-soft px-3 py-2 text-sm"
-      data-testid="provider-license"
-    >
-      <p>
-        <strong>تم التحقق من بيانات المكتب</strong>
-        {date && ` بتاريخ ${date}`}: راجعت إدارة المنصة {VERIFIED_DOCUMENTS}.
-      </p>
-      <p className="text-muted">
-        يقتصر التحقق على هذه المستندات، ولا يشمل تقييم جودة العمل أو التحقق من تصريح المكتب لكل خدمة
-        يعرضها.
-      </p>
-    </div>
   );
 }

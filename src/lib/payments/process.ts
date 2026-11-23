@@ -206,5 +206,39 @@ export async function reconcileStalePayments(now = Date.now()) {
       logError("payment reconcile (sweep)", err);
     }
   }
+  await refundExtraPayments();
   return settled;
+}
+
+/** آخر محاولة استرداد لكل دفعة زائدة (محاولة كل 30 دقيقة على الأكثر) */
+const lastRefundTry = new Map<string, number>();
+const REFUND_RETRY_MS = 30 * 60_000;
+
+/**
+ * دفعات زائدة لم يُسترد مبلغها: دفعة مدفوعة لطلب سبقتها دفعة مدفوعة أخرى للطلب نفسه
+ * (يحدث حين يدفع العميل أكثر من مرة). يُعاد استردادها من المُجدول حتى تنجح.
+ */
+export async function refundExtraPayments(now = Date.now()) {
+  const extras = await serviceDb().query<{ id: string }>(
+    `select p.id from public.payments p
+     where p.status = 'paid' and p.created_at > now() - interval '30 days'
+       and exists (
+         select 1 from public.payments q
+         where q.order_id = p.order_id and q.id <> p.id and q.status in ('paid', 'refunded')
+           and (q.paid_at, q.id) < (p.paid_at, p.id)
+       )
+     order by p.paid_at limit 10`,
+  );
+  let refunded = 0;
+  for (const { id } of extras) {
+    if (now - (lastRefundTry.get(id) ?? 0) < REFUND_RETRY_MS) continue;
+    lastRefundTry.set(id, now);
+    try {
+      await refundPayment(id, { cancelRequest: false });
+      refunded += 1;
+    } catch (err) {
+      logError("extra payment refund (retry)", err);
+    }
+  }
+  return refunded;
 }

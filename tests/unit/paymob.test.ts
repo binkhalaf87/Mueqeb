@@ -480,3 +480,49 @@ describe("PaymobGateway inquiry token backoff", () => {
     expect(authCalls).toBe(1);
   });
 });
+
+describe("PaymobGateway refund with the inquiry token (KSA)", () => {
+  function gatewayWith(handler: (path: string, body: Record<string, unknown>) => Response) {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/auth/tokens") return Response.json({ token: "tok" });
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      calls.push({ path, body });
+      return handler(path, body);
+    });
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "api-key" },
+      fetchMock as unknown as typeof fetch,
+    );
+    return { gateway, calls };
+  }
+  const payment = { providerRef: "mq_1", gatewayPaymentId: "12843608", amountHalalas: 2100 };
+
+  it("refunds with auth_token in the body", async () => {
+    const { gateway, calls } = gatewayWith(() => Response.json({ id: 9, success: true }));
+    expect((await gateway.refund(payment)).refundRef).toBe("9");
+    expect(calls[0]).toEqual({
+      path: "/api/acceptance/void_refund/refund",
+      body: { transaction_id: "12843608", amount_cents: 2100, auth_token: "tok" },
+    });
+  });
+
+  it("voids a same-day transaction when the refund is refused", async () => {
+    const { gateway, calls } = gatewayWith((path) =>
+      path.endsWith("/refund")
+        ? Response.json({ detail: "not settled" }, { status: 422 })
+        : Response.json({ id: 10, success: true }),
+    );
+    expect((await gateway.refund(payment)).refundRef).toBe("10");
+    expect(calls.map((c) => c.path)).toEqual([
+      "/api/acceptance/void_refund/refund",
+      "/api/acceptance/void_refund/void",
+    ]);
+  });
+
+  it("fails when every method is refused, so the scheduler retries later", async () => {
+    const { gateway } = gatewayWith(() => Response.json({ detail: "no" }, { status: 422 }));
+    await expect(gateway.refund(payment)).rejects.toThrow();
+  });
+});

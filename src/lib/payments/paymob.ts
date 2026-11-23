@@ -380,19 +380,80 @@ export class PaymobGateway implements PaymentProvider {
     return null;
   }
 
+  /**
+   * استرداد كامل. بحسب Paymob: عملية اليوم نفسه قبل التسوية تُلغى (void)، وبعد التسوية تُسترد (refund).
+   * نجرّب الاسترداد ثم الإلغاء برمز المصادقة (auth_token في الجسم + Bearer)، ثم بالمفتاح السري كاحتياط.
+   * المعلّق أو المرفوض لا يُسجَّل كناجح: يُعاد لاحقاً من المُجدول.
+   */
   async refund(payment: {
     providerRef: string;
     gatewayPaymentId: string | null;
     amountHalalas: number;
   }): Promise<RefundResult> {
     if (!payment.gatewayPaymentId) throw new Error("gateway payment id is required for refund");
-    const result = await this.post<{ id?: number | string; success?: boolean; pending?: boolean }>(
-      "/api/acceptance/void_refund/refund",
-      { transaction_id: payment.gatewayPaymentId, amount_cents: payment.amountHalalas },
-    );
-    // الاسترداد المعلّق لا يُسجَّل كناجح: يُعاد المحاولة لاحقاً أو يصل حدثه عبر الـ webhook
-    if (!result.success) throw new Error("Paymob refund was not successful");
-    return { refundRef: String(result.id ?? payment.gatewayPaymentId), raw: result };
+    const transactionId = payment.gatewayPaymentId;
+    const attempts: {
+      label: string;
+      run: () => Promise<{ status: number; body: unknown } | null>;
+    }[] = [
+      {
+        label: "refund (token)",
+        run: () =>
+          this.bearerRequest("POST", "/api/acceptance/void_refund/refund", {
+            transaction_id: transactionId,
+            amount_cents: payment.amountHalalas,
+          }),
+      },
+      {
+        label: "void (token)",
+        run: () =>
+          this.bearerRequest("POST", "/api/acceptance/void_refund/void", {
+            transaction_id: transactionId,
+          }),
+      },
+      {
+        label: "refund (secret key)",
+        run: () =>
+          this.postRaw("/api/acceptance/void_refund/refund", {
+            transaction_id: transactionId,
+            amount_cents: payment.amountHalalas,
+          }),
+      },
+    ];
+    for (const attempt of attempts) {
+      let result: { status: number; body: unknown } | null;
+      try {
+        result = await attempt.run();
+      } catch (error) {
+        logError(`paymob ${attempt.label}`, error);
+        continue;
+      }
+      if (!result) continue;
+      const body = isObject(result.body) ? result.body : {};
+      // تشخيص بلا أسرار: الحالة ورسالة Paymob المختصرة فقط
+      console.info(
+        `[paymob refund] ${attempt.label} tx ${transactionId} → ${result.status} ` +
+          `success=${String(body.success)} pending=${String(body.pending)} ` +
+          `detail=${String(body.detail ?? body.message ?? body.data_message ?? "").slice(0, 120)}`,
+      );
+      if (result.status >= 200 && result.status < 300 && body.success === true && !body.pending) {
+        return { refundRef: String(body.id ?? transactionId), raw: body };
+      }
+    }
+    throw new Error("Paymob refund was not successful");
+  }
+
+  /** طلب بالمفتاح السري يعيد الحالة والجسم دون رمي (للتشخيص) */
+  private async postRaw(path: string, body: unknown) {
+    const res = await this.fetchImpl(`${BASE}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${this.config.secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
   }
 }
 

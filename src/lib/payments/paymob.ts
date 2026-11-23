@@ -201,17 +201,9 @@ export class PaymobGateway implements PaymentProvider {
     const found = sources.find(([, value]) => typeof value === "string" && value.trim());
     const provided = (found?.[1] ?? "").trim().toLowerCase();
 
-    const secret = this.config.hmacSecret;
-    const fieldsMessage = PAYMOB_HMAC_FIELDS.map((f) => field(tx, f)).join("");
-    const candidates = {
-      fields_sha512: createHmac("sha512", secret).update(fieldsMessage).digest("hex"),
-      fields_sha256: createHmac("sha256", secret).update(fieldsMessage).digest("hex"),
-      body_sha512: createHmac("sha512", secret).update(rawBody).digest("hex"),
-      body_sha256: createHmac("sha256", secret).update(rawBody).digest("hex"),
-    };
-    const matched = provided
-      ? Object.entries(candidates).find(([, expected]) => safeEqual(provided, expected))?.[0]
-      : undefined;
+    const matched =
+      /^[a-f0-9]{128}$/.test(provided) &&
+      safeEqual(provided, paymobHmac(tx, this.config.hmacSecret));
     if (!matched) {
       // تشخيص بلا أسرار: لا قيمة للتوقيع ولا للسر ولا للجسم
       console.info(
@@ -220,13 +212,14 @@ export class PaymobGateway implements PaymentProvider {
       );
       throw new WebhookVerificationError("invalid hmac");
     }
-    if (matched !== "fields_sha512") console.info(`[paymob webhook] hmac matched ${matched}`);
 
     // في Paymob السعودية قد يكون المرجع في كائن intention لا في المعاملة نفسها
     const providerRef = referenceOf(tx) ?? intentionReference(payload);
     if (!providerRef) throw new IgnoredWebhookEvent("no merchant reference");
     // معاملات حساب Paymob المشترك التي لم تُنشأ من مُعقّب
     if (!providerRef.startsWith("mq_")) throw new IgnoredWebhookEvent("foreign order");
+    if (!this.config.integrationIds.includes(Number(tx.integration_id)))
+      throw new IgnoredWebhookEvent("foreign integration");
     if (tx.pending && !tx.is_refunded) throw new IgnoredWebhookEvent("pending");
     return transactionEvent(tx, providerRef, payload);
   }
@@ -242,37 +235,22 @@ export class PaymobGateway implements PaymentProvider {
         "GET",
         `/api/acceptance/transactions/${transactionId}`,
       );
-      if (viaBearer) {
+      if (viaBearer && viaBearer.status === 200) {
         console.info(
           `[paymob transaction] bearer /api/acceptance/transactions/:id → ${viaBearer.status}`,
         );
         const tx = transactionsIn(viaBearer.body)[0];
         const ref = tx ? (referenceOf(tx) ?? intentionReference(viaBearer.body)) : null;
-        if (tx && ref)
+        if (
+          tx &&
+          ref &&
+          String(tx.id) === transactionId &&
+          this.config.integrationIds.includes(Number(tx.integration_id))
+        )
           return tx.pending && !tx.is_refunded ? null : transactionEvent(tx, ref, viaBearer.body);
       }
     } catch (error) {
       logError("paymob transaction (bearer)", error);
-    }
-    for (const path of [
-      `/api/acceptance/transactions/${transactionId}`,
-      `/v1/transactions/${transactionId}/`,
-    ]) {
-      let result: { status: number; body: unknown };
-      try {
-        result = await this.get(path);
-      } catch (error) {
-        logError(`paymob transaction ${path}`, error);
-        continue;
-      }
-      const tx = transactionsIn(result.body)[0];
-      console.info(`[paymob transaction] ${path.replace(transactionId, ":id")} → ${result.status}`);
-      if (!tx) continue;
-      const providerRef =
-        referenceOf(tx) ?? intentionReference(result.body) ?? intentionReference(tx);
-      if (!providerRef) return null;
-      if (tx.pending && !tx.is_refunded) return null;
-      return transactionEvent(tx, providerRef, result.body);
     }
     return null;
   }
@@ -335,7 +313,10 @@ export class PaymobGateway implements PaymentProvider {
     const res = await this.fetchImpl(`${BASE}${path}`, {
       method,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body:
+        body === undefined
+          ? undefined
+          : JSON.stringify({ ...(body as Record<string, unknown>), auth_token: token }),
     });
     if (res.status === 401) {
       this.authToken = null;
@@ -350,41 +331,29 @@ export class PaymobGateway implements PaymentProvider {
     const result = await this.bearerRequest("POST", "/api/ecommerce/orders/transaction_inquiry", {
       merchant_order_id: providerRef,
     });
-    if (!result) return [];
+    if (!result || result.status !== 200) return [];
     const txs = transactionsIn(result.body);
     console.info(`[paymob inquiry] transaction_inquiry → ${result.status}, ${txs.length} tx`);
     return txs;
   }
 
-  private async get(path: string): Promise<{ status: number; body: unknown }> {
-    const res = await this.fetchImpl(`${BASE}${path}`, {
-      method: "GET",
-      headers: { Authorization: `Token ${this.config.secretKey}` },
-    });
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = null;
-    }
-    return { status: res.status, body };
-  }
-
   /**
-   * استعلام احتياطي من الخادم بالمفتاح السري حين لا يصل الـ webhook.
-   * يجرّب مسارات Paymob المعروفة بالترتيب، ولا يقبل إلا معاملة مرجعها مرجعنا نفسه.
+   * استعلام احتياطي من الخادم عبر واجهة الاستعلام الموثقة حين لا يصل الـ webhook.
+   * لا يقبل إلا معاملة مرجعها مرجعنا نفسه ومن أحد تكاملاتنا.
    * المعلّقة لا تُحسم (null)، والنتيجة تمر بالمسار idempotent نفسه للـ webhook.
    */
   async fetchPayment(
     providerRef: string,
-    gatewayRef?: string | null,
+    _gatewayRef?: string | null,
   ): Promise<PaymentEvent | null> {
     if (!providerRef.startsWith("mq_")) return null;
 
     // الطريق الموثّق أولاً: الاستعلام بمرجعنا عبر رمز Bearer من مفتاح API
     try {
       const inquired = (await this.inquire(providerRef)).filter(
-        (tx) => (referenceOf(tx) ?? providerRef) === providerRef,
+        (tx) =>
+          referenceOf(tx) === providerRef &&
+          this.config.integrationIds.includes(Number(tx.integration_id)),
       );
       const event = settle(inquired, providerRef);
       if (event) return event;
@@ -392,33 +361,6 @@ export class PaymobGateway implements PaymentProvider {
       logError("paymob inquiry", error);
     }
 
-    const ref = encodeURIComponent(providerRef);
-    const paths = [
-      ...(gatewayRef ? [`/v1/intention/${encodeURIComponent(gatewayRef)}/`] : []),
-      `/v1/transactions/?special_reference=${ref}`,
-      `/v1/transactions/?merchant_order_id=${ref}`,
-      `/api/acceptance/transactions/?merchant_order_id=${ref}`,
-    ];
-    for (const path of paths) {
-      let result: { status: number; body: unknown };
-      try {
-        result = await this.get(path);
-      } catch (error) {
-        logError(`paymob lookup ${path.split("?")[0]}`, error);
-        continue;
-      }
-      // معاملات intention مرجعها مرجعنا (المرجع قد يكون على مستوى intention فقط)
-      const intentionMatches = intentionReference(result.body) === providerRef;
-      const candidates = transactionsIn(result.body).filter((tx) => {
-        const ref = referenceOf(tx);
-        return ref === providerRef || (ref === null && intentionMatches);
-      });
-      console.info(
-        `[paymob lookup] ${path.split("?")[0]} → ${result.status}, ${candidates.length} matching tx`,
-      );
-      if (!candidates.length) continue;
-      return settle(candidates, providerRef);
-    }
     return null;
   }
 

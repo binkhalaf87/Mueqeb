@@ -201,14 +201,18 @@ describe("PaymobGateway fallback lookup (fetchPayment)", () => {
   function routes(map: Record<string, unknown>) {
     return vi.fn(async (url: string) => {
       const path = new URL(url).pathname;
+      if (path === "/api/auth/tokens") return Response.json({ token: "token-1" });
       const key = Object.keys(map).find((k) => path.startsWith(k));
       return key ? Response.json(map[key]) : new Response("not found", { status: 404 });
     });
   }
 
   it("settles a successful transaction found by our reference", async () => {
-    const fetchMock = routes({ "/v1/transactions/": { results: [transaction()] } });
-    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
+    const fetchMock = routes({ "/api/ecommerce/orders/transaction_inquiry": transaction() });
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "test" },
+      fetchMock as unknown as typeof fetch,
+    );
     const event = await gateway.fetchPayment(ref);
     expect(event).toMatchObject({
       status: "paid",
@@ -218,51 +222,58 @@ describe("PaymobGateway fallback lookup (fetchPayment)", () => {
       currency: "SAR",
       eventId: "paymob_987654_paid",
     });
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toContain(`special_reference=${ref}`);
-    expect((init.headers as Record<string, string>).Authorization).toBe(
-      `Token ${config.secretKey}`,
-    );
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toContain("/api/ecommerce/orders/transaction_inquiry");
+    expect(JSON.parse(String(init.body))).toEqual({
+      merchant_order_id: ref,
+      auth_token: "token-1",
+    });
   });
 
-  it("uses the intention first and accepts its transactions by the intention reference", async () => {
+  it("does not accept an inquiry with a missing merchant reference", async () => {
     const tx = transaction({ order: { id: 555, merchant_order_id: null } });
     const fetchMock = routes({
-      "/v1/intention/": { id: "pi_1", special_reference: ref, transactions: [tx] },
+      "/api/ecommerce/orders/transaction_inquiry": tx,
     });
-    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "test" },
+      fetchMock as unknown as typeof fetch,
+    );
     const event = await gateway.fetchPayment(ref, "pi_1");
-    expect(event?.status).toBe("paid");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/v1/intention/pi_1/");
+    expect(event).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("falls through 404s to the next known path", async () => {
+  it("does not attempt undocumented paths after a 404", async () => {
     const fetchMock = routes({ "/api/acceptance/transactions/": [transaction()] });
-    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
-    expect((await gateway.fetchPayment(ref))?.status).toBe("paid");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "test" },
+      fetchMock as unknown as typeof fetch,
+    );
+    expect(await gateway.fetchPayment(ref)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("ignores other apps' transactions, keeps pending ones open, and maps refunds", async () => {
     const foreign = transaction({ order: { id: 1, merchant_order_id: "jobai_77" } });
     let gateway = new PaymobGateway(
-      config,
-      routes({ "/v1/transactions/": { results: [foreign] } }) as unknown as typeof fetch,
+      { ...config, inquiryApiKey: "test" },
+      routes({ "/api/ecommerce/orders/transaction_inquiry": foreign }) as unknown as typeof fetch,
     );
     expect(await gateway.fetchPayment(ref)).toBeNull();
 
     gateway = new PaymobGateway(
-      config,
+      { ...config, inquiryApiKey: "test" },
       routes({
-        "/v1/transactions/": { results: [transaction({ pending: true, success: false })] },
+        "/api/ecommerce/orders/transaction_inquiry": transaction({ pending: true, success: false }),
       }) as unknown as typeof fetch,
     );
     expect(await gateway.fetchPayment(ref)).toBeNull();
 
     gateway = new PaymobGateway(
-      config,
+      { ...config, inquiryApiKey: "test" },
       routes({
-        "/v1/transactions/": { results: [transaction({ is_refunded: true })] },
+        "/api/ecommerce/orders/transaction_inquiry": transaction({ is_refunded: true }),
       }) as unknown as typeof fetch,
     );
     expect((await gateway.fetchPayment(ref))?.status).toBe("refunded");
@@ -293,26 +304,32 @@ describe("PaymobGateway webhook with an intention-level reference", () => {
 });
 
 describe("PaymobGateway transaction lookup (admin reconcile)", () => {
-  it("reads a transaction by id and falls back to the second path", async () => {
+  it("reads a transaction by id using the documented Bearer endpoint", async () => {
     const fetchMock = vi.fn(async (url: string) =>
-      new URL(url).pathname.startsWith("/v1/transactions/")
-        ? Response.json(transaction())
-        : new Response("not found", { status: 404 }),
+      new URL(url).pathname === "/api/auth/tokens"
+        ? Response.json({ token: "t" })
+        : new URL(url).pathname.startsWith("/api/acceptance/transactions/")
+          ? Response.json(transaction())
+          : new Response("not found", { status: 404 }),
     );
-    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "test" },
+      fetchMock as unknown as typeof fetch,
+    );
     const event = await gateway.fetchTransaction("987654");
     expect(event).toMatchObject({ providerRef: "mq_abc123", status: "paid", amountHalalas: 22050 });
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/acceptance/transactions/987654");
-    expect(String(fetchMock.mock.calls[1][0])).toContain("/v1/transactions/987654/");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/api/acceptance/transactions/987654");
   });
 
   it("returns the transaction's own reference (the caller compares it) and rejects bad ids", async () => {
     const foreign = transaction({ order: { id: 1, merchant_order_id: "jobai_77" } });
     const gateway = new PaymobGateway(
-      config,
-      vi.fn(async () => Response.json(foreign)) as unknown as typeof fetch,
+      { ...config, inquiryApiKey: "test" },
+      vi.fn(async (url: string) =>
+        url.endsWith("/api/auth/tokens") ? Response.json({ token: "t" }) : Response.json(foreign),
+      ) as unknown as typeof fetch,
     );
-    expect((await gateway.fetchTransaction("1"))?.providerRef).toBe("jobai_77");
+    expect((await gateway.fetchTransaction("987654"))?.providerRef).toBe("jobai_77");
     const none = vi.fn();
     const strict = new PaymobGateway(config, none as unknown as typeof fetch);
     expect(await strict.fetchTransaction("1/../x")).toBeNull();
@@ -327,7 +344,10 @@ describe("PaymobGateway automatic inquiry with the API key", () => {
       if (path === "/api/auth/tokens") return Response.json({ token: "bearer-1" });
       if (path === "/api/ecommerce/orders/transaction_inquiry") {
         expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer bearer-1");
-        expect(JSON.parse(String(init?.body))).toEqual({ merchant_order_id: "mq_abc123" });
+        expect(JSON.parse(String(init?.body))).toEqual({
+          merchant_order_id: "mq_abc123",
+          auth_token: "bearer-1",
+        });
         return Response.json(transaction());
       }
       return new Response("not found", { status: 404 });
@@ -385,13 +405,14 @@ describe("PaymobGateway webhook signature sources and forms (Paymob KSA)", () =>
     expect((await gateway.verifyWebhook(body, headers)).status).toBe("paid");
   });
 
-  it("accepts SHA-512 and SHA-256 over the raw body, and SHA-256 over the fields", async () => {
+  it("rejects undocumented signing algorithms and raw body signatures", async () => {
     const { createHmac } = await import("node:crypto");
     const body = JSON.stringify({ type: "TRANSACTION", transaction: tx });
     for (const algo of ["sha512", "sha256"] as const) {
       const sig = createHmac(algo, config.hmacSecret).update(body).digest("hex");
-      const event = await gateway.verifyWebhook(body, new Headers({ hmac: sig }));
-      expect(event.status).toBe("paid");
+      await expect(gateway.verifyWebhook(body, new Headers({ hmac: sig }))).rejects.toBeInstanceOf(
+        WebhookVerificationError,
+      );
     }
     const fields = [
       "amount_cents",
@@ -422,9 +443,9 @@ describe("PaymobGateway webhook signature sources and forms (Paymob KSA)", () =>
       })
       .join("");
     const sha256 = createHmac("sha256", config.hmacSecret).update(message).digest("hex");
-    expect((await gateway.verifyWebhook(body, new Headers({ "x-hmac": sha256 }))).status).toBe(
-      "paid",
-    );
+    await expect(
+      gateway.verifyWebhook(body, new Headers({ "x-hmac": sha256 })),
+    ).rejects.toBeInstanceOf(WebhookVerificationError);
   });
 
   it("still rejects a wrong or missing signature from any source", async () => {

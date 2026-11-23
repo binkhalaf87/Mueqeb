@@ -350,11 +350,27 @@ export class PaymobGateway implements PaymentProvider {
 
     // الطريق الموثّق أولاً: الاستعلام بمرجعنا عبر رمز Bearer من مفتاح API
     try {
-      const inquired = (await this.inquire(providerRef)).filter(
+      const all = await this.inquire(providerRef);
+      const inquired = all.filter(
         (tx) =>
           referenceOf(tx) === providerRef &&
           this.config.integrationIds.includes(Number(tx.integration_id)),
       );
+      if (all.length && !inquired.length) {
+        // تشخيص بلا أسرار: سبب استبعاد المعاملة (المرجع أو رقم التكامل) وأشكال حقولها
+        for (const tx of all) {
+          const ref = referenceOf(tx);
+          const order = tx.order;
+          console.info(
+            `[paymob inquiry] skipped tx ${String(tx.id)}: ` +
+              `ref=${ref === null ? "missing" : ref === providerRef ? "match" : "other"} ` +
+              `integration=${String(tx.integration_id)} known=${this.config.integrationIds.join("|")} ` +
+              `orderType=${order === null ? "null" : typeof order} ` +
+              `orderKeys=${isObject(order) ? Object.keys(order).slice(0, 20).join(",") : "-"} ` +
+              `success=${String(tx.success)} pending=${String(tx.pending)}`,
+          );
+        }
+      }
       const event = settle(inquired, providerRef);
       if (event) return event;
     } catch (error) {

@@ -319,3 +319,47 @@ describe("PaymobGateway transaction lookup (admin reconcile)", () => {
     expect(none).not.toHaveBeenCalled();
   });
 });
+
+describe("PaymobGateway automatic inquiry with the API key", () => {
+  it("gets a Bearer token once and inquires by our reference", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/auth/tokens") return Response.json({ token: "bearer-1" });
+      if (path === "/api/ecommerce/orders/transaction_inquiry") {
+        expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer bearer-1");
+        expect(JSON.parse(String(init?.body))).toEqual({ merchant_order_id: "mq_abc123" });
+        return Response.json(transaction());
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "legacy-api-key" },
+      fetchMock as unknown as typeof fetch,
+    );
+    expect((await gateway.fetchPayment("mq_abc123"))?.status).toBe("paid");
+    expect((await gateway.fetchPayment("mq_abc123"))?.status).toBe("paid");
+    const authCalls = fetchMock.mock.calls.filter((c) => String(c[0]).endsWith("/api/auth/tokens"));
+    expect(authCalls).toHaveLength(1);
+  });
+
+  it("does not settle a pending inquiry and skips it without an API key", async () => {
+    const pending = vi.fn(async (url: string) =>
+      new URL(url).pathname === "/api/auth/tokens"
+        ? Response.json({ token: "t" })
+        : Response.json(transaction({ pending: true, success: false })),
+    );
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "k" },
+      pending as unknown as typeof fetch,
+    );
+    expect(await gateway.fetchPayment("mq_abc123")).toBeNull();
+
+    const urls: string[] = [];
+    const noKey = vi.fn(async (url: string) => {
+      urls.push(url);
+      return new Response("not found", { status: 404 });
+    });
+    await new PaymobGateway(config, noKey as unknown as typeof fetch).fetchPayment("mq_abc123");
+    expect(urls.some((u) => u.includes("/api/auth/tokens"))).toBe(false);
+  });
+});

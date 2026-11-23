@@ -1092,3 +1092,6 @@
 - صفحة «مدفوعات معلّقة» `/admin/payments`: المدير يُدخل رقم المعاملة من لوحة البوابة، فيستعلم النظام عنها
   (`fetchTransaction`: `/api/acceptance/transactions/{id}` ثم `/v1/transactions/{id}/`) ويطبّقها فقط إن طابق مرجعها
   مرجع المحاولة وكانت ناجحة، عبر `applyPaymentEvent`، وتُسجَّل في `admin_audit_log` (كيان `payment`، migration `20261123000005`).
+- الاستعلام الآلي الموثّق: `PAYMOB_INQUIRY_API_KEY` (مفتاح API من لوحة Paymob) ← `POST /api/auth/tokens` ← رمز Bearer
+  ← `POST /api/ecommerce/orders/transaction_inquiry` بمرجعنا، أولاً في `fetchPayment`، و`GET /api/acceptance/transactions/{id}`
+  في المطابقة الإدارية. يعمل تلقائياً من صفحات الطلب والمُجدول كل 5 دقائق.

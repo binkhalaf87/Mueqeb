@@ -52,6 +52,8 @@ export function getPaymentProvider(): PaymentProvider {
           .filter(Boolean)
           .map(Number),
         hmacSecret: process.env.PAYMOB_HMAC_SECRET ?? "",
+        // مفتاح API (القديم) للاستعلام الآلي عن حالة المعاملات
+        inquiryApiKey: process.env.PAYMOB_INQUIRY_API_KEY || undefined,
       },
       fetch,
       isLiveMode(),

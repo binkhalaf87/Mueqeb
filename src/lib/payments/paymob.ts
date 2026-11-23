@@ -88,6 +88,11 @@ export type PaymobConfig = {
   /** معرّفات وسائل الدفع (Integration IDs) مفصولة بفواصل في البيئة */
   integrationIds: number[];
   hmacSecret: string;
+  /**
+   * مفتاح API من لوحة Paymob (Settings ← Account Info ← API Key)، غير المفتاح السري.
+   * يُستخدم للحصول على رمز Bearer ثم الاستعلام الآلي عن المعاملات (transaction inquiry).
+   */
+  inquiryApiKey?: string;
 };
 
 export class PaymobGateway implements PaymentProvider {
@@ -200,6 +205,23 @@ export class PaymobGateway implements PaymentProvider {
    */
   async fetchTransaction(transactionId: string): Promise<PaymentEvent | null> {
     if (!/^\d{1,20}$/.test(transactionId)) return null;
+    try {
+      const viaBearer = await this.bearerRequest(
+        "GET",
+        `/api/acceptance/transactions/${transactionId}`,
+      );
+      if (viaBearer) {
+        console.info(
+          `[paymob transaction] bearer /api/acceptance/transactions/:id → ${viaBearer.status}`,
+        );
+        const tx = transactionsIn(viaBearer.body)[0];
+        const ref = tx ? (referenceOf(tx) ?? intentionReference(viaBearer.body)) : null;
+        if (tx && ref)
+          return tx.pending && !tx.is_refunded ? null : transactionEvent(tx, ref, viaBearer.body);
+      }
+    } catch (error) {
+      logError("paymob transaction (bearer)", error);
+    }
     for (const path of [
       `/api/acceptance/transactions/${transactionId}`,
       `/v1/transactions/${transactionId}/`,
@@ -221,6 +243,53 @@ export class PaymobGateway implements PaymentProvider {
       return transactionEvent(tx, providerRef, result.body);
     }
     return null;
+  }
+
+  private authToken: { value: string; expiresAt: number } | null = null;
+
+  /** رمز Bearer من مفتاح API (صالح ساعة لدى Paymob؛ نخزّنه 50 دقيقة) */
+  private async bearerToken(): Promise<string | null> {
+    if (!this.config.inquiryApiKey) return null;
+    if (this.authToken && this.authToken.expiresAt > Date.now()) return this.authToken.value;
+    const res = await this.fetchImpl(`${BASE}/api/auth/tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: this.config.inquiryApiKey }),
+    });
+    const body = (await res.json().catch(() => null)) as { token?: string } | null;
+    console.info(`[paymob auth] /api/auth/tokens → ${res.status}`);
+    if (!res.ok || !body?.token) return null;
+    this.authToken = { value: body.token, expiresAt: Date.now() + 50 * 60_000 };
+    return body.token;
+  }
+
+  /** طلب بـ Bearer (الاستعلام الآلي)؛ null إن لم يُضبط مفتاح الاستعلام */
+  private async bearerRequest(
+    method: "GET" | "POST",
+    path: string,
+    body?: unknown,
+  ): Promise<{ status: number; body: unknown } | null> {
+    const token = await this.bearerToken();
+    if (!token) return null;
+    const res = await this.fetchImpl(`${BASE}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (res.status === 401) this.authToken = null;
+    const json = await res.json().catch(() => null);
+    return { status: res.status, body: json };
+  }
+
+  /** الاستعلام الرسمي عن معاملة طلب بمرجعنا (merchant_order_id) */
+  private async inquire(providerRef: string): Promise<PaymobTransaction[]> {
+    const result = await this.bearerRequest("POST", "/api/ecommerce/orders/transaction_inquiry", {
+      merchant_order_id: providerRef,
+    });
+    if (!result) return [];
+    const txs = transactionsIn(result.body);
+    console.info(`[paymob inquiry] transaction_inquiry → ${result.status}, ${txs.length} tx`);
+    return txs;
   }
 
   private async get(path: string): Promise<{ status: number; body: unknown }> {
@@ -247,6 +316,18 @@ export class PaymobGateway implements PaymentProvider {
     gatewayRef?: string | null,
   ): Promise<PaymentEvent | null> {
     if (!providerRef.startsWith("mq_")) return null;
+
+    // الطريق الموثّق أولاً: الاستعلام بمرجعنا عبر رمز Bearer من مفتاح API
+    try {
+      const inquired = (await this.inquire(providerRef)).filter(
+        (tx) => (referenceOf(tx) ?? providerRef) === providerRef,
+      );
+      const event = settle(inquired, providerRef);
+      if (event) return event;
+    } catch (error) {
+      logError("paymob inquiry", error);
+    }
+
     const ref = encodeURIComponent(providerRef);
     const paths = [
       ...(gatewayRef ? [`/v1/intention/${encodeURIComponent(gatewayRef)}/`] : []),
@@ -272,13 +353,7 @@ export class PaymobGateway implements PaymentProvider {
         `[paymob lookup] ${path.split("?")[0]} → ${result.status}, ${candidates.length} matching tx`,
       );
       if (!candidates.length) continue;
-      // أولوية: المسترد ثم الناجح ثم الفاشل؛ المعلّق لا يُحسم
-      const settled = candidates.filter((tx) => !tx.pending || tx.is_refunded);
-      const pick =
-        settled.find((tx) => tx.is_refunded) ??
-        settled.find((tx) => tx.success && !tx.is_voided) ??
-        settled[0];
-      return pick ? transactionEvent(pick, providerRef, pick) : null;
+      return settle(candidates, providerRef);
     }
     return null;
   }
@@ -346,4 +421,14 @@ function intentionReference(body: unknown): string | null {
   const intention = isObject(body.intention) ? body.intention : body;
   const ref = intention.special_reference ?? intention.merchant_order_id;
   return typeof ref === "string" && ref ? ref : null;
+}
+
+/** يختار نتيجة محسومة: المسترد ثم الناجح ثم الفاشل؛ المعلّقة وحدها لا تُحسم */
+function settle(candidates: PaymobTransaction[], providerRef: string): PaymentEvent | null {
+  const settled = candidates.filter((tx) => !tx.pending || tx.is_refunded);
+  const pick =
+    settled.find((tx) => tx.is_refunded) ??
+    settled.find((tx) => tx.success && !tx.is_voided) ??
+    settled[0];
+  return pick ? transactionEvent(pick, providerRef, pick) : null;
 }

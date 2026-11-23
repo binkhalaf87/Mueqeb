@@ -108,6 +108,7 @@
 | `PAYMOB_PUBLIC_KEY` | المفتاح العام المطابق لنفس الوضع |
 | `PAYMOB_INTEGRATION_ID` | معرّف وسيلة الدفع، أو عدة معرّفات مفصولة بفواصل (بطاقات، Apple Pay…) |
 | `PAYMOB_HMAC_SECRET` | سر HMAC من لوحة Paymob |
+| `PAYMOB_INQUIRY_API_KEY` | مفتاح API من لوحة Paymob (Settings ← Account Info ← API Key، غير المفتاح السري): للاستعلام الآلي عن حالة الدفع حين لا يصل الإشعار |
 
 - كل طلب دفع يحمل رابط العودة ورابط الإشعار الخاصين بمُعقّب (`/api/payments/return` و`/api/payments/webhook`)،
   فلا يتعارض مع JobAI على الحساب نفسه.

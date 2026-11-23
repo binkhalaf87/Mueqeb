@@ -6,6 +6,7 @@ import { getDb } from "@/lib/db/server";
 import type { Tables } from "@/lib/db/types";
 import { formatHalalas } from "@/lib/money";
 import { getPaymentProvider } from "@/lib/payments";
+import { logError } from "@/lib/log";
 import { Card, PageTitle } from "@/components/ui";
 import { PayButton } from "./pay-button";
 
@@ -45,9 +46,15 @@ export default async function PayPage({
   const { data: offices } = await db.rpc("public_provider", { p_provider_id: order.provider_id });
   const office = offices?.[0];
   const pct = (bps: number) => `${bps / 100}%`;
-  const provider = getPaymentProvider();
-  const gateway = provider.name;
-  const livePayments = "live" in provider && provider.live === true;
+  // إعداد بوابة غير صالح (مثل مفتاح حي دون تفعيل الوضع الحي) لا يُسقط الصفحة: رسالة واضحة وتسجيل للخطأ
+  let provider: ReturnType<typeof getPaymentProvider> | null = null;
+  try {
+    provider = getPaymentProvider();
+  } catch (error) {
+    logError("payment provider unavailable", error);
+  }
+  const gateway = provider?.name ?? "";
+  const livePayments = Boolean(provider && "live" in provider && provider.live === true);
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -90,8 +97,18 @@ export default async function PayPage({
       <p className="text-sm" data-testid="before-confirm">
         راجع نطاق العمل، وأتعاب المكتب، ورسوم المنصة، وما لا يشمله العرض.
       </p>
-      <PayButton requestId={id} total={formatHalalas(order.total_paid_halalas)} />
-      {!livePayments && (
+      {provider ? (
+        <PayButton requestId={id} total={formatHalalas(order.total_paid_halalas)} />
+      ) : (
+        <p
+          role="alert"
+          className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          data-testid="payment-unavailable"
+        >
+          الدفع غير متاح حالياً. حاول لاحقاً، وطلبك محفوظ بحالته.
+        </p>
+      )}
+      {provider && !livePayments && (
         <p className="text-center text-xs text-muted">
           وضع الاختبار ({GATEWAY_LABEL[gateway]}) — لا تُخصم أي مبالغ حقيقية.
         </p>

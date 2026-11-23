@@ -48,7 +48,13 @@ export async function startPayment(_prev: FormState, formData: FormData): Promis
     return { message: "هذا الطلب غير متاح للدفع." };
   }
 
-  const provider = getPaymentProvider();
+  let provider: ReturnType<typeof getPaymentProvider>;
+  try {
+    provider = getPaymentProvider();
+  } catch (error) {
+    logError("payment provider unavailable", error);
+    return { message: "الدفع غير متاح حالياً. حاول لاحقاً، وطلبك محفوظ بحالته." };
+  }
   let redirectUrl: string;
   try {
     const session = await provider.createCheckout({

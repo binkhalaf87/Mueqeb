@@ -1,6 +1,8 @@
 /** واجهة بوابة الدفع المجردة: كل بوابة (Moyasar، بوابة الاختبار المحلية…) تطبّقها */
 
-export type GatewayName = "moyasar" | "paymob" | "mock";
+/** كل بوابة هنا يجب أن يسمح بها قيد payments_gateway_check في القاعدة (اختبار تكامل يتحقق) */
+export const GATEWAY_NAMES = ["moyasar", "paymob", "mock"] as const;
+export type GatewayName = (typeof GATEWAY_NAMES)[number];
 
 export type CheckoutInput = {
   orderId: string;

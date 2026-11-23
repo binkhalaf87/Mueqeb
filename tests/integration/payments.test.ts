@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { calcOrderAmounts } from "@/lib/payments/amounts";
+import { GATEWAY_NAMES } from "@/lib/payments/types";
 import { createTestUser, serviceClient, databaseAvailable, type Client } from "./helpers";
 
 const available = await databaseAvailable();
@@ -493,5 +494,21 @@ describe.skipIf(!available)("orders, payments & append-only ledger (local Postgr
       "select journal_id from ledger_entries group by journal_id having sum(debit_halalas) <> sum(credit_halalas)",
     );
     expect(journals).toEqual([]);
+  });
+});
+
+describe.skipIf(!available)("payments gateway constraint", () => {
+  it("allows every gateway the code can use", async () => {
+    const db = new pg.Client({ connectionString: DB_URL });
+    await db.connect();
+    try {
+      const { rows } = await db.query<{ def: string }>(
+        `select pg_get_constraintdef(oid) as def from pg_constraint
+         where conname = 'payments_gateway_check'`,
+      );
+      for (const name of GATEWAY_NAMES) expect(rows[0]?.def).toContain(`'${name}'`);
+    } finally {
+      await db.end();
+    }
   });
 });

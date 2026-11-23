@@ -8,6 +8,9 @@ import { attempt } from "@/lib/db/core";
 import { parseSarToHalalas } from "@/lib/money";
 import { SETTINGS_SCHEMA, type EditableSettingKey } from "@/lib/admin/settings";
 import type { FormState } from "./auth";
+import { getPaymentProvider } from "@/lib/payments";
+import { applyPaymentEvent } from "@/lib/payments/process";
+import { logError } from "@/lib/log";
 
 const ERRORS: Record<string, string> = {
   amount_changed: "تغيّر رصيد المستحقات منذ فتح الصفحة؛ حدّث الصفحة وتحقق من المبلغ.",
@@ -217,4 +220,96 @@ export async function setSuspension(_prev: FormState, formData: FormData): Promi
   revalidatePath("/admin", "layout");
   revalidatePath("/providers", "layout");
   return { message: suspend ? "أُوقف الحساب." : "أُعيد تفعيل الحساب." };
+}
+
+// ============ مطابقة دفعة من البوابة (حين لا يصل إشعارها) ============
+
+/**
+ * المدير يُدخل رقم المعاملة من لوحة البوابة، والنتيجة تأتي من رد البوابة نفسها فقط:
+ * يجب أن يطابق مرجعها مرجع محاولة الدفع، ثم تمر بمسار الإشعار نفسه (idempotent ومطابقة المبلغ).
+ */
+export async function reconcileGatewayPayment(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const admin = await requireRole("admin");
+  const parsed = z
+    .object({
+      paymentId: z.uuid(),
+      transactionId: z
+        .string()
+        .trim()
+        .regex(/^\d{1,20}$/, "رقم المعاملة أرقام فقط كما يظهر في لوحة البوابة"),
+    })
+    .safeParse({
+      paymentId: formData.get("paymentId"),
+      transactionId: formData.get("transactionId"),
+    });
+  if (!parsed.success) return { errors: issues(parsed.error) };
+
+  const payment = await serviceDb().maybeOne<{
+    provider_ref: string;
+    status: string;
+    gateway: string;
+  }>("select provider_ref, status, gateway from public.payments where id = $1", [
+    parsed.data.paymentId,
+  ]);
+  if (!payment || payment.status !== "initiated") {
+    return { message: "محاولة الدفع غير موجودة أو حُسمت مسبقاً." };
+  }
+
+  let provider: ReturnType<typeof getPaymentProvider>;
+  try {
+    provider = getPaymentProvider();
+  } catch (error) {
+    logError("payment provider unavailable", error);
+    return { message: "بوابة الدفع غير مهيأة." };
+  }
+  if (provider.name !== payment.gateway || !provider.fetchTransaction) {
+    return { message: "البوابة الحالية لا تدعم المطابقة برقم المعاملة." };
+  }
+
+  let event: Awaited<ReturnType<NonNullable<typeof provider.fetchTransaction>>>;
+  try {
+    event = await provider.fetchTransaction(parsed.data.transactionId);
+  } catch (error) {
+    logError("gateway transaction lookup", error);
+    return { message: "تعذّر الاستعلام من البوابة. حاول لاحقاً." };
+  }
+  if (!event) {
+    return {
+      message: "لم تُرجع البوابة معاملة مكتملة بهذا الرقم (غير موجودة أو معلّقة). راجع السجلات.",
+    };
+  }
+  if (event.providerRef !== payment.provider_ref) {
+    return { message: "مرجع المعاملة لدى البوابة لا يطابق محاولة الدفع هذه؛ لم يُطبَّق شيء." };
+  }
+  if (event.status !== "paid") {
+    return { message: "المعاملة لدى البوابة ليست ناجحة؛ لم يُطبَّق شيء." };
+  }
+
+  let outcome: string;
+  try {
+    outcome = await applyPaymentEvent(event);
+  } catch (error) {
+    logError("gateway payment reconcile (admin)", error);
+    return { message: "تعذّر تسجيل الدفعة." };
+  }
+  await serviceDb().query(
+    `insert into public.admin_audit_log (entity, entity_key, action, new_value, actor_id)
+     values ('payment', $1, 'reconcile_from_gateway', $2, $3)`,
+    [
+      parsed.data.paymentId,
+      JSON.stringify({ transaction_id: parsed.data.transactionId, outcome }),
+      admin.id,
+    ],
+  );
+  revalidatePath("/admin", "layout");
+  revalidatePath("/dashboard", "layout");
+  return {
+    message:
+      outcome === "processed"
+        ? "طُبّقت الدفعة: الطلب انتقل إلى مرحلة التفويض والمستندات، وقُيّد المبلغ في الضمان."
+        : `نتيجة التطبيق: ${outcome}.`,
+  };
 }

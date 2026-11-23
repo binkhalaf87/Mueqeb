@@ -194,6 +194,35 @@ export class PaymobGateway implements PaymentProvider {
     return transactionEvent(tx, providerRef, payload);
   }
 
+  /**
+   * معاملة بمعرّفها (للمطابقة الإدارية حين لا يصل الإشعار). المرجع في الحدث من المعاملة أو intention،
+   * وعلى المستدعي التأكد من تطابقه مع محاولة الدفع قبل تطبيقه.
+   */
+  async fetchTransaction(transactionId: string): Promise<PaymentEvent | null> {
+    if (!/^\d{1,20}$/.test(transactionId)) return null;
+    for (const path of [
+      `/api/acceptance/transactions/${transactionId}`,
+      `/v1/transactions/${transactionId}/`,
+    ]) {
+      let result: { status: number; body: unknown };
+      try {
+        result = await this.get(path);
+      } catch (error) {
+        logError(`paymob transaction ${path}`, error);
+        continue;
+      }
+      const tx = transactionsIn(result.body)[0];
+      console.info(`[paymob transaction] ${path.replace(transactionId, ":id")} → ${result.status}`);
+      if (!tx) continue;
+      const providerRef =
+        referenceOf(tx) ?? intentionReference(result.body) ?? intentionReference(tx);
+      if (!providerRef) return null;
+      if (tx.pending && !tx.is_refunded) return null;
+      return transactionEvent(tx, providerRef, result.body);
+    }
+    return null;
+  }
+
   private async get(path: string): Promise<{ status: number; body: unknown }> {
     const res = await this.fetchImpl(`${BASE}${path}`, {
       method: "GET",

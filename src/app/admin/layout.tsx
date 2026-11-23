@@ -6,6 +6,7 @@ const ADMIN_NAV = [
   { href: "/admin/disputes", label: "النزاعات" },
   { href: "/admin/payables", label: "المستحقات" },
   { href: "/admin/ledger", label: "الدفتر" },
+  { href: "/admin/payments", label: "مدفوعات معلّقة" },
   { href: "/admin/users", label: "المستخدمون" },
   { href: "/admin/services", label: "الخدمات" },
   { href: "/admin/settings", label: "الإعدادات" },

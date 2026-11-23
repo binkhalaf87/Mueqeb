@@ -45,6 +45,8 @@ export interface PaymentProvider {
   createCheckout(input: CheckoutInput): Promise<CheckoutSession>;
   /** يتحقق من التوقيع ويعيد الحدث، أو يرمي WebhookVerificationError */
   verifyWebhook(rawBody: string, headers: Headers, url?: URL): Promise<PaymentEvent>;
+  /** يستعلم عن معاملة بمعرّفها لدى البوابة (للمطابقة الإدارية)؛ غير مدعوم = غير معرّف */
+  fetchTransaction?(transactionId: string): Promise<PaymentEvent | null>;
   /** يستعلم من البوابة مباشرة عن حالة الدفع (null إن لم تدعمه أو لم تُحسم بعد) */
   fetchPayment(providerRef: string, gatewayRef?: string | null): Promise<PaymentEvent | null>;
   /** استرداد كامل؛ يرمي عند الفشل */

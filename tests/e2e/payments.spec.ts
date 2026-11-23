@@ -172,3 +172,31 @@ test("مسار العودة من البوابة يعيد العميل لصفحة
   const bad = await request.get("/api/payments/return?request=../../admin", { maxRedirects: 0 });
   expect(bad.headers().location).toMatch(/\/dashboard\/requester$/);
 });
+
+test("مدفوعات معلّقة: المطابقة برقم المعاملة للإدارة فقط وتُرفض مع بوابة لا تدعمها", async ({
+  browser,
+}) => {
+  // محاولة دفع تُفتح ولا تكتمل (لا إشعار من البوابة)
+  const requester = await as(browser, "0500000003");
+  await directListedOrder(requester);
+  await requester.getByRole("link", { name: /ادفع الآن/ }).click();
+  await requester.getByRole("button", { name: /ادفع .* بالبطاقة/ }).click();
+  await expect(requester).toHaveURL(/\/payments\/test-checkout\//);
+
+  // غير المدير لا يصل للصفحة
+  await requester.goto("/admin/payments");
+  await expect(requester).not.toHaveURL(/\/admin\/payments$/);
+
+  const admin = await as(browser, "admin@mueqeb.test");
+  await admin.goto("/admin/payments");
+  const row = admin.getByTestId("pending-payments").locator("li").first();
+  await expect(row).toContainText("mock");
+
+  await row.getByPlaceholder("رقم المعاملة (Transaction ID)").fill("abc");
+  await row.getByRole("button", { name: "تحقق من البوابة وطبّق" }).click();
+  await expect(row.getByText(/أرقام فقط/)).toBeVisible();
+
+  await row.getByPlaceholder("رقم المعاملة (Transaction ID)").fill("123456");
+  await row.getByRole("button", { name: "تحقق من البوابة وطبّق" }).click();
+  await expect(row.getByText("البوابة الحالية لا تدعم المطابقة برقم المعاملة.")).toBeVisible();
+});

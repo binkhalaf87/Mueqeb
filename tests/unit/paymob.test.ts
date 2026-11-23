@@ -291,3 +291,31 @@ describe("PaymobGateway webhook with an intention-level reference", () => {
     expect(event).toMatchObject({ providerRef: "mq_x1", status: "paid" });
   });
 });
+
+describe("PaymobGateway transaction lookup (admin reconcile)", () => {
+  it("reads a transaction by id and falls back to the second path", async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      new URL(url).pathname.startsWith("/v1/transactions/")
+        ? Response.json(transaction())
+        : new Response("not found", { status: 404 }),
+    );
+    const gateway = new PaymobGateway(config, fetchMock as unknown as typeof fetch);
+    const event = await gateway.fetchTransaction("987654");
+    expect(event).toMatchObject({ providerRef: "mq_abc123", status: "paid", amountHalalas: 22050 });
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/acceptance/transactions/987654");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/v1/transactions/987654/");
+  });
+
+  it("returns the transaction's own reference (the caller compares it) and rejects bad ids", async () => {
+    const foreign = transaction({ order: { id: 1, merchant_order_id: "jobai_77" } });
+    const gateway = new PaymobGateway(
+      config,
+      vi.fn(async () => Response.json(foreign)) as unknown as typeof fetch,
+    );
+    expect((await gateway.fetchTransaction("1"))?.providerRef).toBe("jobai_77");
+    const none = vi.fn();
+    const strict = new PaymobGateway(config, none as unknown as typeof fetch);
+    expect(await strict.fetchTransaction("1/../x")).toBeNull();
+    expect(none).not.toHaveBeenCalled();
+  });
+});

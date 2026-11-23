@@ -1089,3 +1089,6 @@
 - عمود `payments.gateway_intention_id` (migration `20261123000004`) يُحفظ عند بدء الدفع.
 - الإشعار نفسه يقرأ المرجع من `intention.special_reference` إن لم يكن في المعاملة.
 - معلّق: سبب عدم وصول الإشعار أصلاً (إعدادات callback في تكامل Paymob الحي).
+- صفحة «مدفوعات معلّقة» `/admin/payments`: المدير يُدخل رقم المعاملة من لوحة البوابة، فيستعلم النظام عنها
+  (`fetchTransaction`: `/api/acceptance/transactions/{id}` ثم `/v1/transactions/{id}/`) ويطبّقها فقط إن طابق مرجعها
+  مرجع المحاولة وكانت ناجحة، عبر `applyPaymentEvent`، وتُسجَّل في `admin_audit_log` (كيان `payment`، migration `20261123000005`).

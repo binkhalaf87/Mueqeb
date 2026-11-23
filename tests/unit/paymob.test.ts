@@ -363,3 +363,78 @@ describe("PaymobGateway automatic inquiry with the API key", () => {
     expect(urls.some((u) => u.includes("/api/auth/tokens"))).toBe(false);
   });
 });
+
+describe("PaymobGateway webhook signature sources and forms (Paymob KSA)", () => {
+  const gateway = new PaymobGateway(config);
+  const tx = transaction();
+  const fieldsMessage = () => {
+    // نفس رسالة الحقول المستخدمة في paymobHmac
+    const sha512 = paymobHmac(tx, config.hmacSecret);
+    return sha512;
+  };
+
+  it("accepts the signature inside the JSON body with a transaction key", async () => {
+    const body = JSON.stringify({ type: "TRANSACTION", transaction: tx, hmac: fieldsMessage() });
+    const event = await gateway.verifyWebhook(body, new Headers());
+    expect(event).toMatchObject({ providerRef: "mq_abc123", status: "paid" });
+  });
+
+  it("accepts the x-paymob-hmac header", async () => {
+    const body = JSON.stringify({ type: "TRANSACTION", obj: tx });
+    const headers = new Headers({ "x-paymob-hmac": fieldsMessage() });
+    expect((await gateway.verifyWebhook(body, headers)).status).toBe("paid");
+  });
+
+  it("accepts SHA-512 and SHA-256 over the raw body, and SHA-256 over the fields", async () => {
+    const { createHmac } = await import("node:crypto");
+    const body = JSON.stringify({ type: "TRANSACTION", transaction: tx });
+    for (const algo of ["sha512", "sha256"] as const) {
+      const sig = createHmac(algo, config.hmacSecret).update(body).digest("hex");
+      const event = await gateway.verifyWebhook(body, new Headers({ hmac: sig }));
+      expect(event.status).toBe("paid");
+    }
+    const fields = [
+      "amount_cents",
+      "created_at",
+      "currency",
+      "error_occured",
+      "has_parent_transaction",
+      "id",
+      "integration_id",
+      "is_3d_secure",
+      "is_auth",
+      "is_capture",
+      "is_refunded",
+      "is_standalone_payment",
+      "is_voided",
+      "order.id",
+      "owner",
+      "pending",
+      "source_data.pan",
+      "source_data.sub_type",
+      "source_data.type",
+      "success",
+    ];
+    const message = fields
+      .map((f) => {
+        const v = f.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], tx);
+        return v === null || v === undefined ? "" : typeof v === "boolean" ? String(v) : String(v);
+      })
+      .join("");
+    const sha256 = createHmac("sha256", config.hmacSecret).update(message).digest("hex");
+    expect((await gateway.verifyWebhook(body, new Headers({ "x-hmac": sha256 }))).status).toBe(
+      "paid",
+    );
+  });
+
+  it("still rejects a wrong or missing signature from any source", async () => {
+    const body = JSON.stringify({ type: "TRANSACTION", transaction: tx, hmac: "0".repeat(128) });
+    await expect(gateway.verifyWebhook(body, new Headers())).rejects.toBeInstanceOf(
+      WebhookVerificationError,
+    );
+    const unsigned = JSON.stringify({ type: "TRANSACTION", transaction: tx });
+    await expect(gateway.verifyWebhook(unsigned, new Headers())).rejects.toBeInstanceOf(
+      WebhookVerificationError,
+    );
+  });
+});

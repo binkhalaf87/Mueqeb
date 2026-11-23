@@ -179,16 +179,46 @@ export class PaymobGateway implements PaymentProvider {
     } catch {
       throw new WebhookVerificationError("invalid json");
     }
-    const tx = (payload.obj ?? payload.transaction ?? payload) as PaymobTransaction;
-    if (!tx || typeof tx !== "object") throw new WebhookVerificationError("no transaction");
+    // Paymob السعودية ترسل المعاملة تحت transaction، والإصدار القديم تحت obj
+    const txValue = payload.transaction ?? payload.obj ?? payload;
+    if (!isObject(txValue)) throw new WebhookVerificationError("no transaction");
+    const tx = txValue as PaymobTransaction;
 
-    const provided = (url?.searchParams.get("hmac") ?? headers.get("hmac") ?? "").toLowerCase();
-    const expected = paymobHmac(tx, this.config.hmacSecret);
-    const a = Buffer.from(provided);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    // مصادر التوقيع المعروفة: الرابط، ثم الترويسات، ثم جسم الطلب (كما في JobAI على الحساب نفسه)
+    const sources: [string, string | null | undefined][] = [
+      ["query", url?.searchParams.get("hmac") ?? url?.searchParams.get("HMAC")],
+      ["header:hmac", headers.get("hmac")],
+      ["header:x-hmac", headers.get("x-hmac")],
+      ["header:x-paymob-hmac", headers.get("x-paymob-hmac")],
+      ["header:x-paymob-signature", headers.get("x-paymob-signature")],
+      [
+        "body",
+        typeof payload.hmac === "string" ? payload.hmac : (payload.HMAC as string | undefined),
+      ],
+    ];
+    const found = sources.find(([, value]) => typeof value === "string" && value.trim());
+    const provided = (found?.[1] ?? "").trim().toLowerCase();
+
+    const secret = this.config.hmacSecret;
+    const fieldsMessage = PAYMOB_HMAC_FIELDS.map((f) => field(tx, f)).join("");
+    const candidates = {
+      fields_sha512: createHmac("sha512", secret).update(fieldsMessage).digest("hex"),
+      fields_sha256: createHmac("sha256", secret).update(fieldsMessage).digest("hex"),
+      body_sha512: createHmac("sha512", secret).update(rawBody).digest("hex"),
+      body_sha256: createHmac("sha256", secret).update(rawBody).digest("hex"),
+    };
+    const matched = provided
+      ? Object.entries(candidates).find(([, expected]) => safeEqual(provided, expected))?.[0]
+      : undefined;
+    if (!matched) {
+      // تشخيص بلا أسرار: لا قيمة للتوقيع ولا للسر ولا للجسم
+      console.info(
+        `[paymob webhook] hmac rejected: source=${found?.[0] ?? "missing"} length=${provided.length} ` +
+          `top=${Object.keys(payload).join(",")} tx=${Object.keys(tx).slice(0, 40).join(",")}`,
+      );
       throw new WebhookVerificationError("invalid hmac");
     }
+    if (matched !== "fields_sha512") console.info(`[paymob webhook] hmac matched ${matched}`);
 
     // في Paymob السعودية قد يكون المرجع في كائن intention لا في المعاملة نفسها
     const providerRef = referenceOf(tx) ?? intentionReference(payload);
@@ -431,4 +461,11 @@ function settle(candidates: PaymobTransaction[], providerRef: string): PaymentEv
     settled.find((tx) => tx.success && !tx.is_voided) ??
     settled[0];
   return pick ? transactionEvent(pick, providerRef, pick) : null;
+}
+
+/** مقارنة ثابتة الزمن لنصّين سداسيين */
+function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
 }

@@ -1095,3 +1095,7 @@
 - الاستعلام الآلي الموثّق: `PAYMOB_INQUIRY_API_KEY` (مفتاح API من لوحة Paymob) ← `POST /api/auth/tokens` ← رمز Bearer
   ← `POST /api/ecommerce/orders/transaction_inquiry` بمرجعنا، أولاً في `fetchPayment`، و`GET /api/acceptance/transactions/{id}`
   في المطابقة الإدارية. يعمل تلقائياً من صفحات الطلب والمُجدول كل 5 دقائق.
+- إشعار Paymob وصل في الدفعة الثانية لكنه رُفض (401) بسبب التوقيع. صار التحقق يقرأ التوقيع من الرابط أو الترويسات
+  (`hmac`، `x-hmac`، `x-paymob-hmac`، `x-paymob-signature`) أو جسم الطلب، ويقبل SHA-512/256 على الحقول أو على الجسم الخام
+  (كما في JobAI على الحساب نفسه)، ويقرأ المعاملة من `transaction` ثم `obj`. عند الرفض يُسجَّل سطر تشخيص بلا أسرار.
+- `/api/auth/tokens` بمفتاح `PAYMOB_INQUIRY_API_KEY` ردّ 403، و`/v1/intention/{id}/` ردّ 405: الاستعلام الآلي احتياطي فقط.

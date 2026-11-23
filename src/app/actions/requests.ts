@@ -52,7 +52,7 @@ export async function createRequest(_prev: FormState, formData: FormData): Promi
     return { errors: { attachments: `خمسة مرفقات كحد أقصى.` } };
   }
   if (attachments.reduce((sum, f) => sum + f.size, 0) > MAX_ATTACHMENTS_TOTAL_BYTES) {
-    return { errors: { attachments: "حجم المرفقات معاً يتجاوز 10MB." } };
+    return { errors: { attachments: "حجم المرفقات معاً يتجاوز 4MB." } };
   }
   for (const file of attachments) {
     const fileError = validateDocumentFile(file);

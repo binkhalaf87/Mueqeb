@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createRequest } from "@/app/actions/requests";
 import type { FormState } from "@/app/actions/auth";
 import { SAUDI_CITIES } from "@/lib/cities";
 import { formatHalalas } from "@/lib/money";
 import { DELEGATION_LABEL, type DelegationPlatform } from "@/lib/providers/constants";
-import type { RequestMode } from "@/lib/requests/constants";
+import {
+  MAX_ATTACHMENTS_TOTAL_BYTES,
+  MAX_REQUEST_ATTACHMENTS,
+  type RequestMode,
+} from "@/lib/requests/constants";
 import { keepValuesSubmit } from "@/components/keep-values-submit";
 import { Button, Card, Field, FormMessage, Select, TextArea } from "@/components/ui";
 
@@ -47,6 +51,8 @@ export function RequestForm({
   const [state, action, pending] = useActionState<FormState, FormData>(createRequest, {});
   const service = options.find((o) => o.id === initialServiceId);
   const isPublic = mode === "public";
+  // فحص مبكر في المتصفح لحجم المرفقات (الخادم يتحقق أيضاً)
+  const [attachmentsError, setAttachmentsError] = useState<string>();
 
   return (
     <form onSubmit={keepValuesSubmit(action)} className="space-y-6" noValidate>
@@ -205,7 +211,7 @@ export function RequestForm({
             </label>
             <p className="text-xs text-muted">
               صورة من رسالة المنصة الرسمية أو الخطاب أو النموذج تساعد المكاتب على فهم طلبك وتسعيره
-              بدقة. حتى 5 ملفات (PDF أو JPG أو PNG)، والحجم معاً لا يتجاوز 10MB.
+              بدقة. حتى 5 ملفات (PDF أو JPG أو PNG)، والحجم معاً لا يتجاوز 4MB.
             </p>
             <input
               id="attachments"
@@ -213,15 +219,27 @@ export function RequestForm({
               name="attachments"
               multiple
               accept="application/pdf,image/jpeg,image/png"
-              aria-invalid={state.errors?.attachments ? true : undefined}
+              aria-invalid={state.errors?.attachments || attachmentsError ? true : undefined}
+              onChange={(e) => {
+                const files = Array.from(e.currentTarget.files ?? []);
+                const total = files.reduce((sum, f) => sum + f.size, 0);
+                const error =
+                  files.length > MAX_REQUEST_ATTACHMENTS
+                    ? "خمسة مرفقات كحد أقصى."
+                    : total > MAX_ATTACHMENTS_TOTAL_BYTES
+                      ? "حجم المرفقات معاً يتجاوز 4MB. صغّر الملفات أو قلّل عددها."
+                      : undefined;
+                setAttachmentsError(error);
+                if (error) e.currentTarget.value = "";
+              }}
               className="w-full text-sm file:me-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-1.5"
             />
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
               تراها المكاتب قبل اختيار العرض. أخفِ أرقام الهوية والإقامة والأسماء وأرقام التواصل،
               ولا ترفق كلمات مرور أو رموز تحقق.
             </p>
-            {state.errors?.attachments && (
-              <p className="text-sm text-danger">{state.errors.attachments}</p>
+            {(attachmentsError || state.errors?.attachments) && (
+              <p className="text-sm text-danger">{attachmentsError ?? state.errors?.attachments}</p>
             )}
           </div>
         )}

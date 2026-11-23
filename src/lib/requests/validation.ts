@@ -73,9 +73,7 @@ export const createRequestSchema = z
     }
   });
 
-/** المرفقات التوضيحية مع الطلب العام */
-export const MAX_REQUEST_ATTACHMENTS = 5;
-export const MAX_ATTACHMENTS_TOTAL_BYTES = 10 * 1024 * 1024;
+export { MAX_ATTACHMENTS_TOTAL_BYTES, MAX_REQUEST_ATTACHMENTS } from "./constants";
 
 const sar = (message: string, allowZero: boolean) =>
   z.string().transform((v, ctx) => {

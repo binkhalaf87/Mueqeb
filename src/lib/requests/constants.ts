@@ -85,3 +85,7 @@ export function rpcErrorMessage(
   const key = Object.keys(RPC_ERRORS).find((k) => error.message.includes(k));
   return key ? RPC_ERRORS[key] : fallback;
 }
+
+/** المرفقات التوضيحية مع الطلب العام (يُفحص في المتصفح والخادم) */
+export const MAX_REQUEST_ATTACHMENTS = 5;
+export const MAX_ATTACHMENTS_TOTAL_BYTES = 4 * 1024 * 1024;

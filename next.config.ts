@@ -34,8 +34,8 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      // مرفقات الطلب العام حتى 10MB معاً (والمستند الواحد 5MB) + هامش multipart
-      bodySizeLimit: "11mb",
+      // مستند واحد حتى 5MB، ومرفقات الطلب العام حتى 4MB معاً + هامش multipart
+      bodySizeLimit: "6mb",
       // نطاقات الواجهة المسموح لها باستدعاء Server Actions (Vercel أمام خادم Railway)
       allowedOrigins: process.env.SERVER_ACTIONS_ALLOWED_ORIGINS?.split(",")
         .map((o) => o.trim())

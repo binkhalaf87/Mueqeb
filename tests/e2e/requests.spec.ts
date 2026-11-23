@@ -230,3 +230,16 @@ test("رقم جوال في عنوان الطلب يُرفض", async ({ page }) =
   await expect(page.getByText(/لا تكتب أرقام جوال/)).toBeVisible();
   await expect(page).toHaveURL(/\/requests\/new$/);
 });
+
+test("المرفقات معاً لا تتجاوز 4MB", async ({ page }) => {
+  await logIn(page, "establishment@mueqeb.test");
+  await page.goto("/dashboard/requester/requests/new");
+  await page.getByLabel(/مرفقات توضيحية/).setInputFiles([
+    {
+      name: "big.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.alloc(4 * 1024 * 1024 + 1, "a"),
+    },
+  ]);
+  await expect(page.getByText(/حجم المرفقات معاً يتجاوز 4MB/)).toBeVisible();
+});

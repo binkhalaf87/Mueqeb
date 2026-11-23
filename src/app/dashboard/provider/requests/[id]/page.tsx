@@ -184,8 +184,8 @@ export default async function ProviderRequestPage({
           {details.contact_email && <p>البريد: {details.contact_email}</p>}
           {details.private_notes && <p>ملاحظات العميل: {details.private_notes}</p>}
           <p className="pt-1 text-xs text-muted">
-            تبدأ الخدمة بعد دفع العميل. لا تطلب من العميل أبداً كلمات مرور أو رموز تحقق لحساباته
-            الحكومية؛ التفويض يتم عبر المنصات الرسمية فقط.
+            تبدأ الخدمة بعد دفع العميل. وضّح له نوع الصلاحية التي تحتاجها على حساب المنشأة وطريقة
+            منحها عبر المنصة الرسمية المختصة.
           </p>
         </Card>
       )}

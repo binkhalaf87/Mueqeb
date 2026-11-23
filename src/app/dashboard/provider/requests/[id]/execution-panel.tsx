@@ -68,8 +68,8 @@ export async function ProviderExecutionPanel({ requestId }: { requestId: string 
           <div className="space-y-2 border-t border-border pt-3">
             {!delegationReady && (
               <p className="text-sm text-muted">
-                تبدأ التنفيذ بعد أن يؤكد العميل منح التفويض عبر المنصة الرسمية. لا تطلب منه أبداً
-                كلمة مرور أو رمز تحقق.
+                تبدأ التنفيذ بعد أن يؤكد العميل منحك الصلاحية المطلوبة عبر المنصة الرسمية. وضّح له
+                في المحادثة نوع الصلاحية التي تحتاجها وطريقة منحها.
               </p>
             )}
             <ActionButton

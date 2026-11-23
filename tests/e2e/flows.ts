@@ -42,7 +42,7 @@ export async function paidRequest(browser: Browser) {
 export async function deliver(browser: Browser, requester: Page, requestId: string) {
   const guide = requester.getByTestId("delegation-guide");
   await expect(guide).toContainText("تفويض المكتب عبر منصة قوى");
-  await expect(guide).toContainText("لن نطلب منك أبداً كلمة مرور");
+  await expect(guide).toContainText("امنح المكتب الصلاحية التي تحتاجها معاملتك");
   // لا حقول لكلمات مرور في صفحة الطلب إطلاقاً
   await expect(requester.locator('input[type="password"]')).toHaveCount(0);
 

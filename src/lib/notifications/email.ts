@@ -13,7 +13,6 @@ export function renderEmail(n: OutgoingNotification) {
 <p>${escapeHtml(greeting)}</p>
 <p>${escapeHtml(n.body)}</p>
 ${n.url ? `<p><a href="${escapeHtml(n.url)}">فتح في مُعقّب</a></p>` : ""}
-<p style="color:#666;font-size:12px">لن نطلب منك أبداً كلمة مرور أو رمز تحقق لحساباتك الحكومية.</p>
 </div>`;
   return { subject: `مُعقّب — ${n.title}`, text, html };
 }

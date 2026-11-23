@@ -91,8 +91,8 @@ export async function RequesterExecutionPanel({ requestId }: { requestId: string
             ))}
           </ol>
           <p className="rounded-lg bg-background px-3 py-2 text-sm">
-            🔒 لن نطلب منك أبداً كلمة مرور أو رمز تحقق. التفويض يتم من حسابك في المنصة الرسمية فقط،
-            ولا تشارك أي رمز يصلك مع أحد.
+            امنح المكتب الصلاحية التي تحتاجها معاملتك فقط، من حسابك في المنصة الرسمية المختصة، ثم
+            أكّد ذلك هنا ليبدأ المكتب.
           </p>
           {!request.delegation_confirmed_at && (
             <ActionButton

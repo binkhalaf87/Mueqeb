@@ -234,8 +234,7 @@ export function RequestForm({
               className="w-full text-sm file:me-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-1.5"
             />
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-              تراها المكاتب قبل اختيار العرض. أخفِ أرقام الهوية والإقامة والأسماء وأرقام التواصل،
-              ولا ترفق كلمات مرور أو رموز تحقق.
+              تراها المكاتب قبل اختيار العرض. أخفِ أرقام الهوية والإقامة والأسماء وأرقام التواصل.
             </p>
             {(attachmentsError || state.errors?.attachments) && (
               <p className="text-sm text-danger">{attachmentsError ?? state.errors?.attachments}</p>

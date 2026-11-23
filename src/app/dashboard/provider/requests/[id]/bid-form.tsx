@@ -76,7 +76,7 @@ export function BidForm({
         rows={2}
         maxLength={1000}
         defaultValue={initial?.needsFromClient}
-        hint="مثل: التفويض في قوى، صور الإقامات. لا تطلب كلمات مرور أو رموز تحقق، ولا تضع أرقام تواصل."
+        hint="مثل: صلاحية على المنشأة في قوى، صور الإقامات. لا تضع أرقام تواصل."
         error={state.errors?.needsFromClient}
       />
       <Button type="submit" disabled={pending} className="sm:w-auto">

@@ -127,10 +127,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/dashboar
 
       <Card className="space-y-4" data-testid="account-password">
         <h2 className="font-semibold">كلمة المرور</h2>
-        <p className="text-sm text-muted">
-          هذه كلمة مرور حسابك في مُعقّب فقط. لن نطلب منك أبداً كلمة مرور أو رمز تحقق لحساباتك
-          الحكومية.
-        </p>
+        <p className="text-sm text-muted">هذه كلمة مرور حسابك في مُعقّب فقط.</p>
         <PasswordForm />
       </Card>
     </div>

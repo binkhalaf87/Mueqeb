@@ -11,7 +11,7 @@ export function UploadRequestDocument({
   labels,
   defaultLabel = "إثبات الإنجاز",
   kind,
-  hint = "ارفع المستندات اللازمة لهذا الطلب فقط. لا ترفق كلمات مرور أو رموز تحقق.",
+  hint = "ارفع المستندات اللازمة لهذا الطلب فقط.",
   testId,
 }: {
   requestId: string;

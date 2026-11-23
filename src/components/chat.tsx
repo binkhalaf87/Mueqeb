@@ -143,9 +143,6 @@ export function Chat({
               {state.message}
             </p>
           )}
-          <p className="text-xs text-muted">
-            لا تشارك أبداً كلمات مرور أو رموز تحقق لحساباتك الحكومية.
-          </p>
         </form>
       )}
     </Card>

@@ -438,3 +438,24 @@ describe("PaymobGateway webhook signature sources and forms (Paymob KSA)", () =>
     );
   });
 });
+
+describe("PaymobGateway inquiry token backoff", () => {
+  it("does not request a new token again after a 429", async () => {
+    let authCalls = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (new URL(url).pathname === "/api/auth/tokens") {
+        authCalls += 1;
+        return new Response("too many", { status: 429 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const gateway = new PaymobGateway(
+      { ...config, inquiryApiKey: "k" },
+      fetchMock as unknown as typeof fetch,
+    );
+    await gateway.fetchPayment("mq_abc123");
+    await gateway.fetchPayment("mq_abc123");
+    await Promise.all([gateway.fetchPayment("mq_a"), gateway.fetchPayment("mq_b")]);
+    expect(authCalls).toBe(1);
+  });
+});

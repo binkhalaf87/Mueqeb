@@ -22,6 +22,8 @@ import {
  */
 
 const BASE = "https://ksa.paymob.com";
+/** مهلة إعادة طلب رمز الاستعلام بعد فشله */
+const AUTH_RETRY_MS = 30 * 60_000;
 
 /** حقول التوقيع بالترتيب الأبجدي الذي تعتمده Paymob */
 export const PAYMOB_HMAC_FIELDS = [
@@ -276,19 +278,48 @@ export class PaymobGateway implements PaymentProvider {
   }
 
   private authToken: { value: string; expiresAt: number } | null = null;
+  /** بعد فشل طلب الرمز لا نعيد المحاولة قبل هذا الوقت (تفادي 429 على الحساب المشترك) */
+  private authBlockedUntil = 0;
+  /** طلب رمز جارٍ: الطلبات المتزامنة تنتظره بدل طلب رموز متعددة */
+  private authPending: Promise<string | null> | null = null;
 
   /** رمز Bearer من مفتاح API (صالح ساعة لدى Paymob؛ نخزّنه 50 دقيقة) */
   private async bearerToken(): Promise<string | null> {
     if (!this.config.inquiryApiKey) return null;
     if (this.authToken && this.authToken.expiresAt > Date.now()) return this.authToken.value;
-    const res = await this.fetchImpl(`${BASE}/api/auth/tokens`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: this.config.inquiryApiKey }),
+    if (Date.now() < this.authBlockedUntil) return null;
+    if (this.authPending) return this.authPending;
+    this.authPending = this.requestToken().finally(() => {
+      this.authPending = null;
     });
+    return this.authPending;
+  }
+
+  private async requestToken(): Promise<string | null> {
+    const apiKey = this.config.inquiryApiKey as string;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${BASE}/api/auth/tokens`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+    } catch (error) {
+      this.authBlockedUntil = Date.now() + AUTH_RETRY_MS;
+      throw error;
+    }
     const body = (await res.json().catch(() => null)) as { token?: string } | null;
     console.info(`[paymob auth] /api/auth/tokens → ${res.status}`);
-    if (!res.ok || !body?.token) return null;
+    if (!res.ok || !body?.token) {
+      // 429: نحترم Retry-After إن وُجد، وإلا ننتظر 30 دقيقة؛ أي فشل آخر 30 دقيقة كذلك
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const wait =
+        res.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.max(retryAfter * 1000, 60_000)
+          : AUTH_RETRY_MS;
+      this.authBlockedUntil = Date.now() + wait;
+      return null;
+    }
     this.authToken = { value: body.token, expiresAt: Date.now() + 50 * 60_000 };
     return body.token;
   }
@@ -306,7 +337,10 @@ export class PaymobGateway implements PaymentProvider {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (res.status === 401) this.authToken = null;
+    if (res.status === 401) {
+      this.authToken = null;
+      this.authBlockedUntil = Date.now() + 5 * 60_000;
+    }
     const json = await res.json().catch(() => null);
     return { status: res.status, body: json };
   }
